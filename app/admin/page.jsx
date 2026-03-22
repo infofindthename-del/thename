@@ -30,7 +30,16 @@ function safeDate(str) {
   } catch { return "—"; }
 }
 
+// ── Top-level wrapper: blocca SSR completamente ──────────────────
+// Questo elimina TUTTI gli errori React #418 #423 #425
 export default function AdminPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return <AdminApp />;
+}
+
+function AdminApp() {
   const [authed, setAuthed] = useState(false);
   const [pwd, setPwd] = useState("");
   const [pwdError, setPwdError] = useState(false);
