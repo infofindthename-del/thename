@@ -1,1011 +1,1398 @@
-"use client";
-// VERSION: FINAL-v4 — fix hydration + fix input prima lettera
+'use client';
+import { useState, useEffect, useRef } from 'react';
 
-import { useState, useEffect, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
+const ADMIN_PIN = '2025';
+const CONTACT_EMAIL = 'info.findthename@gmail.com';
+const INSTAGRAM_URL = 'https://www.instagram.com/thename_talentagency';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "thename2026";
-
-const RUOLI = [
-  "Art Director","Photographer","Model","Graphic Designer","AI Artist",
-  "Make-up Artist","Screenwriter","Event Planner","Illustrator",
-  "Fashion Stylist","Videomaker","Fashion Designer","Digital Artist",
-  "Creative Producer","Casting Director","Copywriter","Set Designer",
-  "Content Creator / Social Media Manager",
+const PALETTES = [
+  {bg:'#1a1714',accent:'#c8d622'},{bg:'#2c1810',accent:'#e8c49e'},
+  {bg:'#0e1a1c',accent:'#9db3be'},{bg:'#1c0e10',accent:'#d4426a'},
+  {bg:'#1a1a14',accent:'#c8d622'},{bg:'#2a1a14',accent:'#e8c49e'},
 ];
 
-// FIX: formatta date senza toLocaleDateString — SSR safe, output identico su server e client
-function safeDate(str) {
-  if (!str) return "—";
-  try {
-    const d = String(str).split("T")[0]; // "2026-03-22"
-    const [y, m, dd] = d.split("-");
-    if (!y || !m || !dd) return "—";
-    return `${dd}/${m}/${y}`;
-  } catch { return "—"; }
+const CATEGORIES = [
+  {key:'all',label:<>the[<em>all</em>]</>},
+  {key:'Art Director',label:<>the[<em>art directors</em>]</>},
+  {key:'Photographer',label:<>the[<em>photographers</em>]</>},
+  {key:'Fashion Stylist',label:<>the[<em>stylists</em>]</>},
+  {key:'Videomaker',label:<>the[<em>videomakers</em>]</>},
+  {key:'Set Designer',label:<>the[<em>set designers</em>]</>},
+  {key:'Fashion Designer',label:<>the[<em>designers</em>]</>},
+];
+
+const DAYS = ['Lu','Ma','Me','Gi','Ve','Sa','Do'];
+
+const G = `
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Archivo:wght@300;400;500;600&family=Archivo+Narrow:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--lime:#c8d622;--pink:#d4426a;--sand:#e8c49e;--terra:#7a3e30;--peach:#e8a87c;--ink:#0d0b0a;--off:#f5f0eb;--mid:#7a7068;}
+html{scroll-behavior:smooth;}
+body{font-family:'Archivo',sans-serif;background:var(--off);color:var(--ink);}
+button,a,label,select{cursor:pointer;}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:24px 48px;mix-blend-mode:multiply;}
+.nav-logo{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:400;letter-spacing:.5px;color:var(--ink);}
+.nav-logo em{font-style:italic;}
+.nav-links{display:flex;gap:28px;align-items:center;}
+.nav-btn{font-size:11px;font-weight:500;letter-spacing:1.5px;text-transform:uppercase;background:none;border:none;color:var(--ink);padding:0;transition:opacity .2s;opacity:.45;font-family:'Archivo Narrow',sans-serif;}
+.nav-btn:hover,.nav-btn.active{opacity:1;}
+.nav-admin{font-size:10px;letter-spacing:2px;text-transform:uppercase;background:var(--ink);color:var(--off);border:none;padding:7px 16px;font-family:'Archivo Narrow',sans-serif;transition:background .2s;}
+.nav-admin:hover{background:var(--pink);}
+.hamburger{display:none;background:none;border:none;padding:4px;flex-direction:column;gap:5px;cursor:pointer;}
+.hamburger span{display:block;width:22px;height:1.5px;background:var(--ink);transition:all .3s;}
+.mobile-menu{display:none;position:fixed;inset:0;background:var(--ink);z-index:99;flex-direction:column;align-items:center;justify-content:center;gap:32px;}
+.mobile-menu.open{display:flex;}
+.mobile-menu-btn{font-size:24px;font-family:'Cormorant Garamond',serif;font-weight:300;font-style:italic;color:var(--off);background:none;border:none;letter-spacing:-0.5px;}
+.mobile-menu-btn:hover{color:var(--lime);}
+.mobile-menu-close{position:absolute;top:28px;right:32px;background:none;border:none;color:rgba(245,240,235,.4);font-size:22px;}
+.page{display:none;}.page.active{display:block;}
+.hero{min-height:100vh;display:flex;flex-direction:column;background:var(--lime);position:relative;overflow:hidden;padding:120px 48px 80px;}
+.hero-noise{position:absolute;inset:0;opacity:.03;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;pointer-events:none;}
+.hero-label{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(13,11,10,.5);font-weight:500;margin-bottom:40px;font-family:'Archivo Narrow',sans-serif;}
+.hero-headline{font-family:'Cormorant Garamond',serif;font-size:clamp(64px,10vw,140px);font-weight:300;line-height:.95;letter-spacing:-3px;color:var(--ink);max-width:1100px;}
+.hero-headline em{font-style:italic;}
+.hero-bottom{margin-top:auto;padding-top:80px;display:flex;justify-content:space-between;align-items:flex-end;}
+.hero-desc{font-size:16px;line-height:1.7;color:rgba(13,11,10,.65);font-weight:300;max-width:460px;}
+.hero-desc strong{font-weight:600;color:var(--ink);}
+.hero-ctas{display:flex;gap:16px;}
+.btn-bracket{font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;background:none;border:none;color:var(--ink);padding:12px 0;border-bottom:1px solid var(--ink);transition:all .2s;}
+.btn-bracket:hover{color:var(--pink);border-color:var(--pink);}
+.hero-scroll{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(13,11,10,.4);writing-mode:vertical-rl;font-family:'Archivo Narrow',sans-serif;}
+.two-sides{display:grid;grid-template-columns:1fr 1fr;}
+.side{padding:80px 60px;display:flex;flex-direction:column;justify-content:space-between;}
+.side-creatives{background:var(--sand);}
+.side-seekers{background:var(--terra);color:var(--off);}
+.side-tag{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;margin-bottom:32px;opacity:.6;}
+.side-title{font-family:'Cormorant Garamond',serif;font-size:clamp(40px,4vw,64px);font-weight:300;line-height:.95;letter-spacing:-2px;}
+.side-title em{font-style:italic;}
+.side-body{font-size:15px;line-height:1.7;font-weight:300;opacity:.75;max-width:400px;margin:32px 0;}
+.side-cta{display:inline-flex;align-items:center;gap:10px;font-size:12px;letter-spacing:2px;text-transform:uppercase;background:none;border:none;padding:0;font-family:'Archivo Narrow',sans-serif;font-weight:500;transition:gap .2s;}
+.side-creatives .side-cta{color:var(--terra);}
+.side-seekers .side-cta{color:var(--off);}
+.side-cta:hover{gap:18px;}
+.comm-strip{background:#e8a87c;color:var(--ink);padding:100px 72px;position:relative;}
+.comm-strip::before{content:'✦';position:absolute;top:56px;right:64px;font-size:14px;color:var(--ink);opacity:.15;}
+.comm-tag-label{font-size:11px;letter-spacing:3px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--lime);opacity:.7;margin-bottom:28px;}
+.comm-big-title{font-family:'Cormorant Garamond',serif;font-size:clamp(44px,5vw,72px);font-weight:300;line-height:.95;letter-spacing:-2px;margin-bottom:28px;}
+.comm-big-title em{font-style:italic;}
+.comm-body-text{font-size:15px;line-height:1.75;font-weight:300;color:rgba(245,240,235,.65);max-width:480px;margin-bottom:48px;}
+.comm-body-text strong{color:var(--off);font-weight:500;}
+.btn-comm{display:inline-flex;align-items:center;gap:12px;padding:18px 40px;background:var(--lime);color:var(--ink);border:none;font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;transition:all .25s;margin-bottom:14px;}
+.btn-comm:hover{background:var(--off);gap:20px;}
+.comm-note{font-size:11px;letter-spacing:1.5px;font-family:'Archivo Narrow',sans-serif;color:rgba(245,240,235,.3);text-transform:uppercase;}
+.comm-stats{display:flex;gap:40px;margin-top:56px;padding-top:40px;border-top:1px solid rgba(245,240,235,.08);}
+.comm-stat-n{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:300;font-style:italic;color:var(--lime);line-height:1;}
+.comm-stat-l{font-size:10px;letter-spacing:2px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:rgba(245,240,235,.35);margin-top:4px;}
+.seeker-banner{background:var(--pink);padding:100px 72px;display:grid;grid-template-columns:1fr auto;gap:80px;align-items:center;}
+.seeker-banner-title{font-family:'Cormorant Garamond',serif;font-size:clamp(56px,7vw,100px);font-weight:300;line-height:.9;letter-spacing:-3px;color:var(--off);}
+.seeker-banner-title em{font-style:italic;}
+.seeker-banner-right{display:flex;flex-direction:column;gap:16px;align-items:flex-end;}
+.seeker-banner-sub{font-size:14px;color:rgba(245,240,235,.6);font-weight:300;text-align:right;line-height:1.6;max-width:320px;}
+.btn-seeker{display:inline-block;padding:18px 40px;background:var(--off);color:var(--ink);text-decoration:none;font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;transition:all .2s;}
+.btn-seeker:hover{background:var(--lime);}
+.services{background:#ffffff;padding:100px 64px;color:var(--ink);}
+.services-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:60px;}
+.service-item{padding:72px 56px;background:var(--off);border:none;}
+.service-num{font-family:'Cormorant Garamond',serif;font-size:80px;font-weight:300;font-style:italic;color:rgba(245,240,235,.12);line-height:1;margin-bottom:-20px;}
+.service-name{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:300;line-height:1;letter-spacing:-1px;margin-bottom:16px;}
+.service-desc{font-size:14px;line-height:1.7;opacity:.65;font-weight:300;max-width:360px;}
+.service-tag{display:inline-block;margin-top:20px;font-size:10px;letter-spacing:2px;text-transform:uppercase;border:1px solid rgba(245,240,235,.3);padding:4px 12px;opacity:.6;font-family:'Archivo Narrow',sans-serif;}
+.section{padding:80px 48px;}
+.section-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:48px;padding-bottom:16px;border-bottom:1px solid rgba(13,11,10,.1);}
+.section-title{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:300;letter-spacing:-1.5px;line-height:1;}
+.section-title em{font-style:italic;}
+.section-count{font-size:12px;color:var(--mid);letter-spacing:1px;font-family:'Archivo Narrow',sans-serif;}
+.cat-tabs{display:flex;margin-bottom:40px;border-bottom:1px solid rgba(13,11,10,.1);overflow-x:auto;}
+.cat-tab{padding:14px 20px;background:none;border:none;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;font-weight:500;color:var(--mid);transition:all .2s;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;}
+.cat-tab:hover{color:var(--ink);}
+.cat-tab.active{color:var(--ink);border-bottom-color:var(--ink);}
+.cat-tab em{font-style:italic;font-family:'Cormorant Garamond',serif;font-size:14px;text-transform:none;letter-spacing:0;}
+.search-wrap{position:relative;margin-bottom:40px;}
+.search-input{width:100%;padding:20px 24px 20px 56px;background:var(--off);border:none;border-bottom:2px solid rgba(13,11,10,.15);font-family:'Cormorant Garamond',serif;font-size:22px;font-style:italic;outline:none;transition:border-color .2s;color:var(--ink);}
+.search-input:focus{border-bottom-color:var(--ink);}
+.search-input::placeholder{color:rgba(13,11,10,.3);}
+.search-icon{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:20px;color:var(--mid);}
+.creative-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
+.c-card{background:var(--off);border:1px solid rgba(13,11,10,.06);transition:all .3s;position:relative;overflow:hidden;}
+.c-card:hover{z-index:2;transform:scale(1.01);}
+.c-card:hover .c-overlay{opacity:1;}
+.c-card:hover .c-img-inner{transform:scale(1.04);}
+.c-img{height:280px;position:relative;overflow:hidden;}
+.c-img-inner{width:100%;height:100%;transition:transform .6s;display:flex;align-items:center;justify-content:center;font-size:13px;letter-spacing:2px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:rgba(255,255,255,.3);background-size:cover;background-position:center;}
+.c-overlay{position:absolute;inset:0;background:rgba(13,11,10,.5);opacity:0;transition:opacity .3s;display:flex;align-items:center;justify-content:center;}
+.c-overlay-text{font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;color:var(--off);}
+.c-body{padding:20px 24px 24px;}
+.c-cat{font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--mid);margin-bottom:8px;}
+.c-name{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;color:var(--ink);letter-spacing:-.3px;margin-bottom:4px;}
+.c-city{font-size:12px;color:var(--mid);margin-bottom:12px;}
+.c-tags{display:flex;flex-wrap:wrap;gap:6px;}
+.c-tag{font-size:10px;padding:3px 10px;border:1px solid rgba(13,11,10,.15);color:var(--mid);font-family:'Archivo Narrow',sans-serif;}
+.c-avail{position:absolute;top:16px;right:16px;font-size:9px;padding:3px 10px;letter-spacing:1.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;font-weight:500;}
+.av-yes{background:var(--lime);color:var(--ink);}
+.av-partial{background:var(--sand);color:var(--terra);}
+.av-no{background:rgba(13,11,10,.7);color:var(--off);}
+.empty-state{grid-column:1/-1;padding:80px 40px;text-align:center;border:1px dashed rgba(13,11,10,.12);}
+.empty-state-title{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:300;font-style:italic;color:var(--ink);margin-bottom:12px;}
+.empty-state-sub{font-size:13px;color:var(--mid);font-weight:300;line-height:1.7;max-width:400px;margin:0 auto 28px;}
+.modal-bg{position:fixed;inset:0;background:rgba(13,11,10,.85);z-index:200;display:flex;align-items:flex-end;justify-content:flex-end;backdrop-filter:blur(2px);}
+.modal{background:var(--off);width:560px;height:100vh;overflow-y:auto;position:relative;animation:slideIn .4s cubic-bezier(.16,1,.3,1);}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.modal-img{height:320px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background-size:cover;background-position:center;}
+.modal-img-label{font-size:13px;letter-spacing:2px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:rgba(255,255,255,.3);}
+.modal-close{position:absolute;top:20px;left:20px;background:var(--off);border:none;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:14px;z-index:10;}
+.modal-body{padding:36px 40px;}
+.modal-cat-l{font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--mid);margin-bottom:10px;}
+.modal-name{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:300;letter-spacing:-1px;line-height:1;margin-bottom:6px;}
+.modal-city-l{font-size:13px;color:var(--mid);margin-bottom:28px;}
+.modal-sec{font-size:9px;letter-spacing:3px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--mid);margin-bottom:12px;margin-top:28px;}
+.modal-bio{font-size:15px;line-height:1.75;font-weight:300;color:rgba(13,11,10,.75);}
+.modal-port-item{padding:10px 0;border-bottom:1px solid rgba(13,11,10,.08);font-size:14px;color:var(--ink);display:flex;justify-content:space-between;}
+.modal-port-item::after{content:'↗';font-size:12px;color:var(--mid);}
+.modal-actions{display:flex;flex-direction:column;gap:10px;margin-top:32px;}
+.btn-primary-full{padding:16px;background:var(--terra);color:var(--off);border:none;font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;transition:background .2s;}
+.btn-primary-full:hover{background:var(--pink);}
+.btn-outline-full{padding:16px;background:transparent;color:var(--ink);border:1px solid rgba(13,11,10,.2);font-size:12px;letter-spacing:2px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;transition:all .2s;}
+.btn-outline-full:hover{border-color:var(--ink);}
+.avail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
+.avail-card{padding:32px;background:var(--off);border:1px solid rgba(13,11,10,.06);transition:all .2s;}
+.avail-card:hover{background:var(--sand);}
+.avail-name{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;letter-spacing:-.3px;margin-bottom:4px;}
+.avail-role{font-size:10px;letter-spacing:2px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--mid);margin-bottom:20px;}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.cal-head{font-size:9px;text-align:center;letter-spacing:1.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--mid);padding:4px 0;}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:'Archivo Narrow',sans-serif;border:1px solid transparent;}
+.cal-day.free{background:rgba(200,214,34,.2);color:var(--ink);border-color:rgba(200,214,34,.3);}
+.cal-day.partial{background:rgba(232,196,158,.3);color:var(--terra);}
+.cal-day.busy{background:rgba(13,11,10,.05);color:var(--mid);}
+.cal-day.empty{opacity:0;}
+.cal-legend{display:flex;gap:20px;margin-top:14px;}
+.cal-legend-item{font-size:10px;color:var(--mid);display:flex;align-items:center;}
+.cal-dot{width:8px;height:8px;display:inline-block;margin-right:6px;}
+.seekers-hero{background:var(--terra);color:var(--off);padding:80px 48px 60px;}
+.seekers-title{font-family:'Cormorant Garamond',serif;font-size:clamp(48px,7vw,96px);font-weight:300;line-height:.95;letter-spacing:-3px;margin-bottom:24px;}
+.seekers-title em{font-style:italic;}
+.seekers-sub{font-size:15px;line-height:1.7;opacity:.65;font-weight:300;max-width:480px;}
+.overlay-form{position:fixed;inset:0;background:rgba(13,11,10,.9);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px);}
+.community-modal{background:var(--off);width:100%;max-width:680px;max-height:90vh;overflow-y:auto;padding:48px;position:relative;animation:fadeUp .4s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.cm-close{position:absolute;top:24px;right:24px;background:none;border:none;font-size:18px;color:var(--mid);}
+.cm-label{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--mid);display:block;margin-bottom:8px;}
+.cm-input,.cm-select,.cm-textarea{background:transparent;border:none;border-bottom:1px solid rgba(13,11,10,.2);padding:10px 0;color:var(--ink);font-family:'Archivo',sans-serif;font-size:14px;outline:none;transition:border-color .2s;width:100%;border-radius:0;}
+.cm-input:focus,.cm-select:focus,.cm-textarea:focus{border-bottom-color:var(--ink);}
+.cm-textarea{resize:vertical;min-height:80px;border:1px solid rgba(13,11,10,.2);padding:10px;}
+.cm-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.cm-group{display:flex;flex-direction:column;gap:8px;}
+.cm-group.full{grid-column:1/-1;}
+.cm-checkbox-item{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);margin-bottom:6px;}
+.cm-submit{width:100%;padding:18px;margin-top:28px;background:var(--terra);color:var(--off);border:none;font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;transition:background .2s;}
+.cm-submit:hover:not(:disabled){background:var(--pink);}
+.cm-submit:disabled{opacity:.4;}
+.cm-success{text-align:center;padding:60px 0;}
+.cm-success-icon{font-size:48px;margin-bottom:16px;}
+.cm-success-title{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300;font-style:italic;margin-bottom:8px;}
+.cm-success-sub{font-size:14px;color:var(--mid);font-weight:300;}
+.admin-gate{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--ink);padding:40px;}
+.admin-gate-box{width:100%;max-width:400px;text-align:center;}
+.admin-gate-title{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:300;font-style:italic;color:var(--off);margin-bottom:8px;}
+.admin-gate-sub{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:rgba(245,240,235,.3);margin-bottom:40px;font-family:'Archivo Narrow',sans-serif;}
+.admin-pin-input{width:100%;padding:16px;background:transparent;border:none;border-bottom:1px solid rgba(245,240,235,.2);color:var(--off);font-family:'Cormorant Garamond',serif;font-size:28px;text-align:center;letter-spacing:8px;outline:none;transition:border-color .2s;}
+.admin-pin-input:focus{border-bottom-color:var(--lime);}
+.admin-pin-btn{width:100%;padding:16px;margin-top:24px;background:var(--lime);color:var(--ink);border:none;font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;transition:all .2s;}
+.admin-pin-btn:hover{background:var(--off);}
+.admin-error{font-size:12px;color:var(--pink);margin-top:12px;letter-spacing:1px;font-family:'Archivo Narrow',sans-serif;}
+.admin-panel{min-height:100vh;background:var(--ink);padding-top:130px;}
+.admin-topbar{position:fixed;top:0;left:0;right:0;z-index:50;background:var(--ink);}
+.admin-nav{border-bottom:1px solid rgba(245,240,235,.08);padding:20px 48px;display:flex;align-items:center;justify-content:space-between;}
+.admin-nav-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;color:var(--lime);}
+.admin-nav-exit{font-size:10px;letter-spacing:2px;background:none;border:none;color:rgba(245,240,235,.4);font-family:'Archivo Narrow',sans-serif;text-transform:uppercase;}
+.admin-nav-exit:hover{color:var(--off);}
+.admin-tabs{display:flex;border-bottom:1px solid rgba(245,240,235,.08);padding:0 48px;}
+.admin-tab{padding:16px 24px;background:none;border:none;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:rgba(245,240,235,.3);transition:all .2s;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.admin-tab:hover{color:rgba(245,240,235,.6);}
+.admin-tab.active{color:var(--lime);border-bottom-color:var(--lime);}
+.admin-content{padding:48px;}
+.admin-section-title{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:300;font-style:italic;color:var(--off);margin-bottom:8px;letter-spacing:-1px;}
+.admin-sub{font-size:12px;color:rgba(245,240,235,.35);letter-spacing:1px;font-family:'Archivo Narrow',sans-serif;text-transform:uppercase;margin-bottom:32px;}
+.admin-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.admin-group{display:flex;flex-direction:column;gap:8px;}
+.admin-group.full{grid-column:1/-1;}
+.admin-label{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:rgba(245,240,235,.35);}
+.admin-input,.admin-select,.admin-textarea{background:transparent;border:none;border-bottom:1px solid rgba(245,240,235,.15);padding:10px 0;color:var(--off);font-family:'Archivo',sans-serif;font-size:14px;outline:none;transition:border-color .2s;width:100%;border-radius:0;}
+.admin-input:focus,.admin-select:focus,.admin-textarea:focus{border-bottom-color:var(--lime);}
+.admin-select option{background:#1a1714;}
+.admin-textarea{resize:vertical;min-height:80px;border:1px solid rgba(245,240,235,.12);padding:12px;}
+.admin-btn{width:100%;padding:18px;margin-top:12px;background:var(--lime);color:var(--ink);border:none;font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;transition:all .2s;}
+.admin-btn:hover:not(:disabled){background:var(--off);}
+.admin-btn:disabled{opacity:.3;}
+.admin-output{margin-top:28px;background:rgba(245,240,235,.04);border:1px solid rgba(245,240,235,.1);padding:36px;color:var(--off);font-family:'Archivo',sans-serif;font-size:13px;line-height:2;white-space:pre-wrap;}
+.admin-output-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid rgba(245,240,235,.1);}
+.admin-output-label{font-size:9px;letter-spacing:3px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:var(--lime);}
+.admin-copy-btn{font-size:10px;letter-spacing:2px;text-transform:uppercase;background:none;border:1px solid rgba(245,240,235,.2);color:rgba(245,240,235,.5);padding:6px 16px;transition:all .2s;font-family:'Archivo Narrow',sans-serif;}
+.admin-copy-btn:hover{border-color:var(--lime);color:var(--lime);}
+.cand-card{background:rgba(245,240,235,.04);border:1px solid rgba(245,240,235,.08);padding:28px 32px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;gap:24px;}
+.cand-name{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300;color:var(--off);margin-bottom:4px;}
+.cand-meta{font-size:11px;letter-spacing:1px;font-family:'Archivo Narrow',sans-serif;color:rgba(245,240,235,.35);margin-bottom:10px;}
+.cand-role-tag{font-size:9px;padding:3px 10px;border:1px solid rgba(245,240,235,.15);color:rgba(245,240,235,.5);font-family:'Archivo Narrow',sans-serif;display:inline-block;margin:2px;}
+.status-badge{display:inline-block;font-size:9px;padding:3px 10px;letter-spacing:1.5px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;}
+.status-approved{background:rgba(200,214,34,.15);color:var(--lime);border:1px solid rgba(200,214,34,.2);}
+.status-rejected{background:rgba(212,66,106,.1);color:var(--pink);border:1px solid rgba(212,66,106,.2);}
+.status-pending{background:rgba(245,240,235,.05);color:rgba(245,240,235,.35);border:1px solid rgba(245,240,235,.1);}
+.btn-approve{padding:8px 20px;background:var(--lime);color:var(--ink);border:none;font-size:10px;letter-spacing:2px;font-family:'Archivo Narrow',sans-serif;text-transform:uppercase;transition:all .2s;cursor:pointer;}
+.btn-approve:hover{background:var(--off);}
+.btn-reject{padding:8px 20px;background:transparent;color:rgba(245,240,235,.4);border:1px solid rgba(245,240,235,.15);font-size:10px;letter-spacing:2px;font-family:'Archivo Narrow',sans-serif;text-transform:uppercase;transition:all .2s;cursor:pointer;}
+.btn-reject:hover{border-color:var(--pink);color:var(--pink);}
+.btn-promote{padding:8px 20px;background:var(--terra);color:var(--off);border:none;font-size:10px;letter-spacing:2px;font-family:'Archivo Narrow',sans-serif;text-transform:uppercase;transition:all .2s;cursor:pointer;}
+.btn-promote:hover{background:var(--pink);}
+.admin-creative-card{background:rgba(245,240,235,.04);border:1px solid rgba(245,240,235,.08);padding:20px 28px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.admin-creative-name{font-family:'Cormorant Garamond',serif;font-size:20px;color:var(--off);}
+.admin-creative-meta{font-size:11px;color:rgba(245,240,235,.35);font-family:'Archivo Narrow',sans-serif;letter-spacing:1px;margin-top:2px;}
+.avail-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
+.loading{display:flex;align-items:center;justify-content:center;padding:60px;font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;color:var(--mid);}
+footer{background:var(--sand);color:var(--ink);padding:80px 48px 48px;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:end;}
+.footer-logo{font-family:'Cormorant Garamond',serif;font-size:64px;font-weight:300;font-style:italic;line-height:1;letter-spacing:-2px;margin-bottom:16px;}
+.footer-tagline{font-size:13px;opacity:.4;font-weight:300;}
+.footer-contact a{display:block;font-family:'Cormorant Garamond',serif;font-size:22px;font-style:italic;color:var(--terra);text-decoration:none;margin-bottom:8px;border-bottom:1px solid rgba(122,62,48,.3);padding-bottom:8px;}
+.footer-copy{opacity:.25;font-size:11px;letter-spacing:1px;margin-top:40px;grid-column:1/-1;font-family:'Archivo Narrow',sans-serif;}
+.toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--lime);padding:14px 32px;font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;z-index:9999;animation:toastIn .3s ease;}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.cookie-banner{position:fixed;bottom:0;left:0;right:0;background:var(--ink);color:var(--off);padding:20px 48px;z-index:8000;display:flex;align-items:center;justify-content:space-between;gap:24px;}
+.cookie-text{font-size:12px;line-height:1.6;color:rgba(245,240,235,.7);max-width:700px;}
+.cookie-text a{color:var(--lime);text-decoration:none;border-bottom:1px solid rgba(200,214,34,.3);}
+.cookie-btn{padding:10px 28px;background:var(--lime);color:var(--ink);border:none;cursor:pointer;font-family:'Archivo Narrow',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;white-space:nowrap;transition:background .2s;}
+.cookie-btn:hover{background:var(--off);}
+.legal-overlay{position:fixed;inset:0;background:rgba(13,11,10,.9);z-index:400;display:flex;align-items:flex-start;justify-content:center;padding:60px 24px;overflow-y:auto;backdrop-filter:blur(4px);}
+.legal-modal{background:var(--off);width:100%;max-width:760px;padding:56px;position:relative;animation:fadeUp .4s ease;}
+.legal-close{position:absolute;top:24px;right:24px;background:none;border:none;cursor:pointer;font-size:18px;color:var(--mid);}
+.legal-title{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:300;letter-spacing:-1px;margin-bottom:8px;}
+.legal-date{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--mid);font-family:'Archivo Narrow',sans-serif;margin-bottom:40px;}
+.legal-h2{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;margin-top:32px;margin-bottom:12px;}
+.legal-p{font-size:14px;line-height:1.8;color:rgba(13,11,10,.75);font-weight:300;margin-bottom:12px;}
+.legal-li{font-size:14px;line-height:1.8;color:rgba(13,11,10,.75);font-weight:300;padding-left:16px;margin-bottom:6px;}
+.seeker-form-overlay{position:fixed;inset:0;background:rgba(13,11,10,.85);z-index:400;display:flex;align-items:flex-start;justify-content:center;padding:60px 24px;overflow-y:auto;backdrop-filter:blur(6px);}
+.seeker-form-modal{background:var(--terra);width:100%;max-width:680px;padding:56px;position:relative;animation:fadeUp .4s ease;}
+.seeker-form-close{position:absolute;top:24px;right:24px;background:none;border:none;cursor:pointer;font-size:18px;color:rgba(245,240,235,.4);}
+.seeker-form-close:hover{color:var(--off);}
+.seeker-form-title{font-family:'Cormorant Garamond',serif;font-size:42px;font-weight:300;letter-spacing:-2px;line-height:1;color:var(--off);margin-bottom:8px;}
+.seeker-form-sub{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:rgba(245,240,235,.4);font-family:'Archivo Narrow',sans-serif;margin-bottom:40px;}
+.seeker-field{margin-bottom:28px;}
+.seeker-label{display:block;font-size:9px;letter-spacing:3px;text-transform:uppercase;font-family:'Archivo Narrow',sans-serif;color:rgba(245,240,235,.4);margin-bottom:10px;}
+.seeker-input{width:100%;background:rgba(245,240,235,.06);border:none;border-bottom:1px solid rgba(245,240,235,.2);padding:14px 0;color:var(--off);font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;outline:none;transition:border-color .2s;}
+.seeker-input:focus{border-bottom-color:var(--lime);}
+.seeker-input::placeholder{color:rgba(245,240,235,.25);}
+.seeker-textarea{width:100%;background:rgba(245,240,235,.06);border:none;border-bottom:1px solid rgba(245,240,235,.2);padding:14px 0;color:var(--off);font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;outline:none;resize:none;min-height:90px;transition:border-color .2s;}
+.seeker-textarea:focus{border-bottom-color:var(--lime);}
+.seeker-textarea::placeholder{color:rgba(245,240,235,.25);}
+.seeker-select{width:100%;background:rgba(245,240,235,.06);border:none;border-bottom:1px solid rgba(245,240,235,.2);padding:14px 0;color:var(--off);font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;outline:none;cursor:pointer;-webkit-appearance:none;transition:border-color .2s;}
+.seeker-select:focus{border-bottom-color:var(--lime);}
+.seeker-select option{background:#7a3e30;color:var(--off);}
+.seeker-divider{border:none;border-top:1px solid rgba(245,240,235,.1);margin:36px 0;}
+.seeker-alt{font-size:13px;color:rgba(245,240,235,.45);line-height:1.7;font-weight:300;}
+.seeker-alt a{color:var(--lime);text-decoration:none;border-bottom:1px solid rgba(200,214,34,.3);}
+.seeker-submit{padding:20px 48px;background:var(--lime);color:var(--ink);border:none;cursor:pointer;font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;transition:all .2s;margin-top:8px;}
+.seeker-submit:hover{background:var(--off);}
+.seeker-submit:disabled{opacity:.4;cursor:not-allowed;}
+.seeker-success{text-align:center;padding:40px 0;}
+.seeker-success-icon{font-size:48px;margin-bottom:24px;}
+.seeker-success-title{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:300;color:var(--off);margin-bottom:12px;}
+.seeker-success-text{font-size:14px;color:rgba(245,240,235,.5);line-height:1.7;}
+@media(max-width:900px){
+  nav{padding:20px 24px;}
+  .nav-links{display:none;}
+  .hamburger{display:flex;}
+  .hero{padding:100px 24px 60px;}
+  .two-sides,.creative-grid,.avail-grid,.services-grid{grid-template-columns:1fr;}
+  .side{padding:60px 28px;}
+  .section{padding:60px 24px;}
+  .modal{width:100vw;}
+  .admin-form-grid{grid-template-columns:1fr;}
+  .admin-content{padding:32px 24px;}
+  .admin-tabs{padding:0 24px;}
+  footer{grid-template-columns:1fr;gap:40px;}
+  .seeker-banner{grid-template-columns:1fr;padding:60px 24px;}
+  .comm-strip{padding:60px 28px;}
+  .cm-grid{grid-template-columns:1fr;}
+  .cand-card{flex-direction:column;}
+}
+`;
+
+
+function AvailCalendar({calData}) {
+  if(!calData) return null;
+  const days = Array.from({length:30},(_,i)=>i+1);
+  function getStatus(d){
+    if(calData.free?.includes(d)) return 'free';
+    if(calData.partial?.includes(d)) return 'partial';
+    return 'busy';
+  }
+  return (
+    <div>
+      <div className="cal">
+        {DAYS.map(d=><div key={d} className="cal-head">{d}</div>)}
+        <div className="cal-day empty"/>
+        {days.map(d=><div key={d} className={`cal-day ${getStatus(d)}`}>{d}</div>)}
+      </div>
+      <div className="cal-legend">
+        <span className="cal-legend-item"><span className="cal-dot" style={{background:'rgba(200,214,34,.5)'}}/>Disponibile</span>
+        <span className="cal-legend-item"><span className="cal-dot" style={{background:'rgba(232,196,158,.6)'}}/>Parziale</span>
+        <span className="cal-legend-item"><span className="cal-dot" style={{background:'rgba(13,11,10,.15)'}}/>Occupato</span>
+      </div>
+    </div>
+  );
 }
 
-export default function AdminPage() {
-  const [authed, setAuthed] = useState(false);
-  const [pwd, setPwd] = useState("");
-  const [pwdError, setPwdError] = useState(false);
-  const [tab, setTab] = useState("candidature");
-
-  const login = () => {
-    if (pwd === ADMIN_PASSWORD) setAuthed(true);
-    else setPwdError(true);
-  };
-
-  if (!authed) {
-    return (
-      <div style={d.loginWrap}>
-        <div style={d.loginBox}>
-          <div style={d.loginLogo}>the[name]</div>
-          <div style={d.loginSub}>admin access</div>
-          <input type="password" placeholder="Password" value={pwd}
-            onChange={(e) => { setPwd(e.target.value); setPwdError(false); }}
-            onKeyDown={(e) => e.key === "Enter" && login()}
-            style={{ ...d.input, ...(pwdError ? { borderColor: "#ff4444" } : {}) }}
-            autoFocus />
-          {pwdError && <p style={d.errorText}>Password errata.</p>}
-          <button onClick={login} style={{ ...d.btnPrimary, width:"100%", marginTop:16 }}>ACCEDI</button>
+function CreativeModal({c, onClose, onCommunity, isSeekerPage}) {
+  const palIdx = c.id ? parseInt(c.id.slice(-1), 16) % PALETTES.length : 0;
+  const pal = PALETTES[palIdx] || PALETTES[0];
+  const avClass = c.availability==='available'?'av-yes':c.availability==='partial'?'av-partial':'av-no';
+  const avLabel = c.availability==='available'?'Disponibile':c.availability==='partial'?'Parziale':'Occupato';
+  const tags = typeof c.tags === 'string' ? c.tags.split(',').map(t=>t.trim()) : (c.tags||[]);
+  const portfolio = typeof c.portfolio === 'string' ? c.portfolio.split('\n').filter(Boolean) : (c.portfolio||[]);
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>✕</button>
+        <div className="modal-img" style={{background:c.foto_url?'transparent':pal.bg,backgroundImage:c.foto_url?`url(${c.foto_url})`:'none',backgroundSize:'cover',backgroundPosition:'center'}}>
+          {!c.foto_url && <span className="modal-img-label" style={{color:pal.accent+'66'}}>{(c.ruolo||'').toUpperCase()} · PORTFOLIO</span>}
+          <span className={`c-avail ${avClass}`} style={{position:'absolute',top:16,right:16}}>{avLabel}</span>
+        </div>
+        <div className="modal-body">
+          <div className="modal-cat-l">{c.ruolo} · {c.citta}</div>
+          <div className="modal-name">{c.nome}</div>
+          <div className="modal-city-l">{c.citta}, Italia</div>
+          {c.bio && <><div className="modal-sec">Bio</div><div className="modal-bio">{c.bio}</div></>}
+          {portfolio.length > 0 && <><div className="modal-sec">Portfolio selezionato</div>{portfolio.map(p=><div key={p} className="modal-port-item">{p}</div>)}</>}
+          {tags.length > 0 && <><div className="modal-sec">Skills</div><div className="c-tags">{tags.map(t=><span key={t} className="c-tag">{t}</span>)}</div></>}
+          <div className="modal-actions">
+            {isSeekerPage ? (
+              <button className="btn-primary-full" onClick={()=>window.location.href=`mailto:${CONTACT_EMAIL}?subject=Richiesta collaborazione -- ${c.nome}`}>Contatta questo creativo →</button>
+            ) : (
+              <button className="btn-primary-full" onClick={()=>{onClose();onCommunity();}}>Entra nella nostra community →</button>
+            )}
+            <button className="btn-outline-full" onClick={()=>window.location.href=`mailto:${CONTACT_EMAIL}`}>{isSeekerPage?'Scrivi al team':'Contattaci'}</button>
+          </div>
         </div>
       </div>
-    );
+    </div>
+  );
+}
+
+function CommunityForm({onClose}) {
+  const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [gdpr, setGdpr] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const formRef = useRef();
+
+  function handlePhoto(e) {
+    const file = e.target.files[0];
+    if(file) {
+      setPhotoFile(file);
+      const reader = new FileReader();
+      reader.onload = ev => setPhotoPreview(ev.target.result);
+      reader.readAsDataURL(file);
+    }
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    if(!gdpr) return;
+    setSending(true);
+    const fd = new FormData(formRef.current);
+    const roles = [...formRef.current.querySelectorAll('input[name="role"]:checked')].map(i=>i.value);
+    const aree = [...formRef.current.querySelectorAll('input[name="area"]:checked')].map(i=>i.value);
+    const travel = formRef.current.querySelector('input[name="travel"]:checked')?.value || '';
+    const assistente = formRef.current.querySelector('input[name="assistant"]:checked')?.value || '';
+    try {
+      let foto_url = null;
+      if(photoFile) {
+        const formData = new FormData();
+        formData.append('file', photoFile);
+        formData.append('nome', fd.get('nome'));
+        const uploadRes = await fetch('/api/upload', {method:'POST', body: formData});
+        const uploadData = await uploadRes.json();
+        foto_url = uploadData.url || null;
+      }
+      const submissionDate = new Date().toLocaleString('it-IT');
+      await fetch('/api/candidatures', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          nome: fd.get('nome'),
+          email: fd.get('email'),
+          eta: fd.get('eta'),
+          citta: fd.get('citta'),
+          travel,
+          aree: aree.join(', '),
+          ruoli: roles.join(', '),
+          assistente,
+          preferenze: fd.get('preferenze'),
+          esigenze: fd.get('esigenze'),
+          portfolio: fd.get('portfolio'),
+          foto_url,
+          budget: fd.get('budget'),
+          disponibilita: fd.get('disponibilita'),
+          submission_date: submissionDate,
+        })
+      });
+    } catch(err) { console.error(err); }
+    setSending(false);
+    setSubmitted(true);
+  }
+
+  const ROLES = ['Art Director','Fashion Stylist','Photographer','Videomaker','Model','Fashion Designer','Graphic Designer','Digital Artist','AI Artist','Creative Producer','Make-up Artist','Casting Director','Screenwriter','Copywriter','Event Planner','Set Designer','Illustrator','Content Creator / Social Media Manager'];
+
+  return (
+    <div className="overlay-form" onClick={onClose}>
+      <div className="community-modal" onClick={e=>e.stopPropagation()}>
+        <button className="cm-close" onClick={onClose}>✕</button>
+        {!submitted ? (
+          <form ref={formRef} onSubmit={submit}>
+            <div style={{marginBottom:32}}>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:11,letterSpacing:3,textTransform:'uppercase',color:'var(--mid)',marginBottom:12}}>the[name]</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:36,fontWeight:300,letterSpacing:-1,lineHeight:1}}>Talent<br/><em>Form</em></div>
+            </div>
+            <div className="cm-grid">
+              <div className="cm-group full"><label className="cm-label">Nome e Cognome</label><input className="cm-input" name="nome" required placeholder="[ __________________________________ ]"/></div>
+              <div className="cm-group full"><label className="cm-label">Email *</label><input className="cm-input" name="email" type="email" required placeholder="[ email@esempio.com ]"/></div>
+              <div className="cm-group"><label className="cm-label">Eta</label><input className="cm-input" name="eta" type="number" min="16" max="99" placeholder="[ ___ ]"/></div>
+              <div className="cm-group"><label className="cm-label">Citta di residenza</label><input className="cm-input" name="citta" placeholder="[ __________________________________ ]"/></div>
+            </div>
+            <div style={{margin:'24px 0',borderTop:'1px solid rgba(13,11,10,.08)',paddingTop:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Sei disponibile a viaggiare per lavoro?</label>
+              <label className="cm-checkbox-item"><input type="radio" name="travel" value="Si"/> Si</label>
+              <label className="cm-checkbox-item"><input type="radio" name="travel" value="No"/> No</label>
+            </div>
+            <div style={{marginBottom:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Aree geografiche disponibile a lavorare:</label>
+              {['Italia','Europa','Worldwide'].map(a=>(<label key={a} className="cm-checkbox-item"><input type="checkbox" name="area" value={a}/> {a}</label>))}
+            </div>
+            <div style={{margin:'24px 0',borderTop:'1px solid rgba(13,11,10,.08)',paddingTop:24}}>
+              <label className="cm-label" style={{marginBottom:4}}>Ruolo Creativo</label>
+              <div style={{fontSize:11,color:'var(--mid)',marginBottom:14,fontStyle:'italic'}}>puoi selezionare piu di uno</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 20px'}}>
+                {ROLES.map(r=>(<label key={r} className="cm-checkbox-item"><input type="checkbox" name="role" value={r}/> {r}</label>))}
+              </div>
+            </div>
+            <div style={{margin:'24px 0',borderTop:'1px solid rgba(13,11,10,.08)',paddingTop:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Interesse a lavorare come assistente sul set?</label>
+              <label className="cm-checkbox-item"><input type="radio" name="assistant" value="Si"/> Si</label>
+              <label className="cm-checkbox-item"><input type="radio" name="assistant" value="No"/> No</label>
+            </div>
+            <div style={{margin:'24px 0',borderTop:'1px solid rgba(13,11,10,.08)',paddingTop:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Preferenze tipo di progetti?</label>
+              <div style={{fontSize:11,color:'var(--mid)',marginBottom:10,fontStyle:'italic'}}>editoriali, campagne, eventi, video, altro</div>
+              <textarea className="cm-textarea" name="preferenze" style={{width:'100%'}} rows={3}/>
+            </div>
+            <div style={{marginBottom:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Esigenze particolari?</label>
+              <textarea className="cm-textarea" name="esigenze" style={{width:'100%'}} rows={2}/>
+            </div>
+            <div style={{margin:'24px 0',borderTop:'1px solid rgba(13,11,10,.08)',paddingTop:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Budget indicativo per progetto</label>
+              <select className="cm-select" name="budget" style={{width:'100%'}}>
+                <option value="">Seleziona range budget</option>
+                <option value="Fino a EUR 500">Fino a EUR 500</option>
+                <option value="EUR 500 — 1.500">EUR 500 — 1.500</option>
+                <option value="EUR 1.500 — 3.000">EUR 1.500 — 3.000</option>
+                <option value="EUR 3.000 — 7.000">EUR 3.000 — 7.000</option>
+                <option value="Oltre EUR 7.000">Oltre EUR 7.000</option>
+                <option value="Da definire">Da definire</option>
+              </select>
+            </div>
+            <div style={{marginBottom:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Disponibilità (periodo o date indicative)</label>
+              <input className="cm-input" name="disponibilita" style={{width:'100%'}} placeholder="Es. Giugno–Luglio 2025, dal 15/09, continuativa…"/>
+            </div>
+            <div style={{margin:'24px 0',borderTop:'1px solid rgba(13,11,10,.08)',paddingTop:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Portfolio / Website link</label>
+              <input className="cm-input" name="portfolio" style={{width:'100%'}} placeholder="[ https://... ]"/>
+            </div>
+            <div style={{margin:'24px 0',borderTop:'1px solid rgba(13,11,10,.08)',paddingTop:24}}>
+              <label className="cm-label" style={{marginBottom:12}}>Foto di copertina</label>
+              <div style={{fontSize:11,color:'var(--mid)',marginBottom:12,fontStyle:'italic'}}>Carica una foto che ti rappresenta (JPG, PNG)</div>
+              <input type="file" accept="image/*" onChange={handlePhoto} style={{width:'100%',padding:'10px 0',fontFamily:"'Archivo',sans-serif",fontSize:13,color:'var(--ink)',borderBottom:'1px solid rgba(13,11,10,.2)',background:'transparent',outline:'none'}}/>
+              {photoPreview && <img src={photoPreview} style={{marginTop:12,maxWidth:'100%',maxHeight:180,objectFit:'cover'}} alt="Anteprima"/>}
+            </div>
+            <div style={{margin:'24px 0',background:'rgba(13,11,10,.03)',padding:20}}>
+              <label className="cm-label" style={{marginBottom:14}}>Liberatoria e Consenso al Trattamento Dati</label>
+              <div style={{fontSize:12,color:'var(--mid)',lineHeight:1.8,marginBottom:16,fontWeight:300}}>
+                Io sottoscritto/a dichiaro di aver preso visione e di accettare quanto segue:<br/><br/>
+                <strong style={{color:'var(--ink)'}}>1. Partecipazione alla piattaforma "the[name]"</strong><br/>
+                Autorizzo l'utilizzo del materiale da me fornito, esclusivamente a scopo di presentazione all'interno dei canali the[name]. La partecipazione non implica alcun vincolo di esclusivita.<br/><br/>
+                <strong style={{color:'var(--ink)'}}>2. Utilizzo del materiale inviato</strong><br/>
+                Confermo di essere in possesso dei diritti necessari sui materiali inviati e sollevo the[name] da qualsiasi responsabilita relativa a violazioni di copyright. Autorizzo la diffusione del materiale a scopo illustrativo e non commerciale.<br/><br/>
+                <strong style={{color:'var(--ink)'}}>3. Trattamento dei dati personali (GDPR UE 2016/679)</strong><br/>
+                Acconsento al trattamento dei miei dati personali per finalita connesse alla partecipazione alla piattaforma. I dati non saranno ceduti a terzi.<br/><br/>
+                <strong style={{color:'var(--ink)'}}>4. Revoca</strong><br/>
+                Posso richiedere modifica o rimozione scrivendo a <strong>info.findthename@gmail.com</strong>
+              </div>
+              <label className="cm-checkbox-item" style={{fontWeight:500,fontSize:13}}>
+                <input type="checkbox" checked={gdpr} onChange={e=>setGdpr(e.target.checked)}/> Io sottoscritto/a accetto i termini sopra indicati.
+              </label>
+            </div>
+            <button type="submit" className="cm-submit" disabled={!gdpr||sending}>{sending?'Invio in corso...':'Invia →'}</button>
+          </form>
+        ) : (
+          <div className="cm-success">
+            <div className="cm-success-icon">✦</div>
+            <div className="cm-success-title">candidatura ricevuta.</div>
+            <div className="cm-success-sub">
+              Ti risponderemo entro 7 giorni.
+              <span style={{fontSize:12,marginTop:16,display:'block',opacity:.7}}>Nel frattempo segui i nostri canali:</span>
+              <div style={{display:'flex',gap:16,marginTop:12,justifyContent:'center',flexWrap:'wrap'}}>
+                <a href={INSTAGRAM_URL} target="_blank" rel="noopener" style={{color:'var(--terra)',fontSize:11,letterSpacing:2,textTransform:'uppercase',fontFamily:"'Archivo Narrow',sans-serif"}}>Instagram ↗</a>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SeekerForm({onClose}) {
+  const [form, setForm] = useState({nome:'',azienda:'',email:'',cerca:'',progetto:'',dateStart:'',dateEnd:'',budget:'',note:''});
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  async function submit(e) {
+    e.preventDefault();
+    setSending(true);
+    try {
+      const res = await fetch('/api/seeker-request', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        console.error('Errore invio richiesta seeker:', json.error);
+        alert('Errore durante l\'invio. Riprova o scrivici direttamente a info.findthename@gmail.com');
+        setSending(false);
+        return;
+      }
+    } catch(err) {
+      console.error('Errore rete:', err);
+      alert('Errore di connessione. Riprova o scrivici direttamente a info.findthename@gmail.com');
+      setSending(false);
+      return;
+    }
+    setSending(false);
+    setSent(true);
   }
 
   return (
-    <div style={d.wrap}>
-      <div style={d.topBar}>
-        <div style={d.topBarLogo}>
-          <span style={d.logoItalic}>the[name]</span>
-          <span style={d.logoDot}> · </span>
-          <span style={d.logoAdmin}>admin</span>
-        </div>
-        <button onClick={() => setAuthed(false)} style={d.logoutBtn}>← ESCI</button>
-      </div>
-      <div style={d.tabs}>
-        {[
-          { id:"candidature", label:"CANDIDATURE" },
-          { id:"network",     label:"NETWORK" },
-          { id:"seekers",     label:"RICHIESTE SEEKER" },
-          { id:"documenti",   label:"DOCUMENTI" },
-        ].map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ ...d.tabBtn, ...(tab === t.id ? d.tabActive : {}) }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <div style={d.content}>
-        {tab === "candidature" && <CandidaturesTab />}
-        {tab === "network"     && <NetworkTab />}
-        {tab === "seekers"     && <SeekersTab />}
-        {tab === "documenti"   && <DocumentiTab />}
-      </div>
-    </div>
-  );
-}
-
-// ── CANDIDATURE ──────────────────────────────────────────────────
-function CandidaturesTab() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
-  const [expanded, setExpanded] = useState(null);
-
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
-    setLoading(true);
-    const { data } = await supabase.from("candidatures").select("*").order("created_at", { ascending: false });
-    setItems(data || []);
-    setLoading(false);
-  };
-
-  const acceptAndPromote = async (id) => {
-    const res = await fetch("/api/candidatures", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status: "approved", promote: true }),
-    });
-    const json = await res.json();
-    if (!res.ok) { alert("Errore: " + (json.error || "operazione fallita")); return; }
-    await load();
-  };
-
-  const rejectItem = async (id) => {
-    await fetch("/api/candidatures", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status: "rejected" }),
-    });
-    await load();
-  };
-
-  const counts = {
-    all: items.length,
-    pending: items.filter((i) => i.status === "pending").length,
-    approved: items.filter((i) => i.status === "approved").length,
-    rejected: items.filter((i) => i.status === "rejected").length,
-  };
-  const filtered = filter === "all" ? items : items.filter((i) => i.status === filter);
-
-  return (
-    <div>
-      <SectionTitle title="Candidature" subtitle="Gestisci le candidature al network" />
-      <div style={d.filterBar}>
-        {[{id:"all",label:"Tutte"},{id:"pending",label:"In attesa"},{id:"approved",label:"Approvate"},{id:"rejected",label:"Rifiutate"}].map((f) => (
-          <button key={f.id} onClick={() => setFilter(f.id)}
-            style={{ ...d.filterBtn, ...(filter === f.id ? d.filterActive : {}) }}>
-            {f.label} <span style={d.filterCount}>{counts[f.id]}</span>
-          </button>
-        ))}
-      </div>
-      {loading ? <Loading /> : filtered.length === 0 ? <EmptyBox text="Nessuna candidatura in questa categoria." /> : (
-        <div style={d.list}>
-          {filtered.map((item) => (
-            <div key={item.id} style={d.listItem}>
-              <div style={d.listItemHeader} onClick={() => setExpanded(expanded === item.id ? null : item.id)}>
-                <div style={d.listItemLeft}>
-                  {item.foto_url ? <img src={item.foto_url} alt={item.nome} style={d.miniAvatar} /> : <AvatarFallback name={item.nome} />}
-                  <div>
-                    <span style={d.listItemName}>{item.nome}</span>
-                    <span style={d.listItemMeta}>{item.ruoli} · {item.citta}</span>
-                  </div>
-                </div>
-                <div style={d.listItemRight}>
-                  <StatusBadge status={item.status || "pending"} />
-                  <span style={d.chevron}>{expanded === item.id ? "▲" : "▼"}</span>
-                </div>
-              </div>
-              {expanded === item.id && (
-                <div style={d.listItemBody}>
-                  <div style={d.detailGrid}>
-                    <Detail label="Età" value={item.eta} />
-                    <Detail label="Città" value={item.citta} />
-                    <Detail label="Email" value={item.email} />
-                    <Detail label="Aree" value={item.aree} />
-                    <Detail label="Travel" value={item.travel} />
-                    <Detail label="Assistente" value={item.assistente} />
-                    <Detail label="Budget" value={item.budget} />
-                    <Detail label="Disponibilità" value={item.disponibilita} />
-                    {/* FIX: safeDate invece di toLocaleDateString — nessun hydration mismatch */}
-                    <Detail label="Data" value={safeDate(item.created_at)} />
-                    <Detail label="Preferenze" value={item.preferenze} span={2} />
-                    <Detail label="Esigenze" value={item.esigenze} span={2} />
-                  </div>
-                  <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:16 }}>
-                    {item.portfolio && <a href={item.portfolio} target="_blank" rel="noopener noreferrer" style={d.linkBtn}>Portfolio →</a>}
-                    {item.foto_url && <a href={item.foto_url} target="_blank" rel="noopener noreferrer" style={d.linkBtn}>Foto →</a>}
-                  </div>
-                  {item.status === "pending" && (
-                    <div style={d.actionRow}>
-                      <button onClick={() => acceptAndPromote(item.id)} style={d.approveBtn}>✓ Accetta al network</button>
-                      <button onClick={() => rejectItem(item.id)} style={d.rejectBtn}>✕ Rifiuta</button>
-                    </div>
-                  )}
-                  {item.status === "approved" && <p style={{ fontSize:12, color:"#c8d622", marginTop:8 }}>✓ Accettato — profilo aggiunto al network</p>}
-                  {item.status === "rejected" && <button onClick={() => acceptAndPromote(item.id)} style={d.btnSecondary}>Rimetti in attesa</button>}
-                </div>
-              )}
+    <div className="seeker-form-overlay" onClick={onClose}>
+      <div className="seeker-form-modal" onClick={e=>e.stopPropagation()}>
+        <button className="seeker-form-close" onClick={onClose}>✕</button>
+        {sent ? (
+          <div className="seeker-success">
+            <div className="seeker-success-icon">✦</div>
+            <div className="seeker-success-title">Richiesta inviata</div>
+            <div className="seeker-success-text">Ti contatteremo entro 24 ore per presentarti i profili più adatti al tuo progetto.</div>
+          </div>
+        ) : (
+          <form onSubmit={submit}>
+            <div className="seeker-form-title">Trova il<br/><em>talento</em></div>
+            <div className="seeker-form-sub">the[name] — Richiesta creativo</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 32px'}}>
+              <div className="seeker-field"><label className="seeker-label">Il tuo nome *</label><input className="seeker-input" required value={form.nome} onChange={e=>set('nome',e.target.value)} placeholder="Nome Cognome"/></div>
+              <div className="seeker-field"><label className="seeker-label">Azienda / Brand *</label><input className="seeker-input" required value={form.azienda} onChange={e=>set('azienda',e.target.value)} placeholder="Brand S.r.l."/></div>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── NETWORK ──────────────────────────────────────────────────────
-function NetworkTab() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [showAdd, setShowAdd] = useState(false);
-
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await fetch("/api/creatives").then(r => r.json());
-      setItems(Array.isArray(data) ? data : []);
-    } catch { setItems([]); }
-    setLoading(false);
-  };
-
-  const toggleVisible = async (id, current) => {
-    await supabase.from("creatives").update({ visible: !current }).eq("id", id);
-    await load();
-  };
-
-  return (
-    <div>
-      <SectionTitle title="Network" subtitle="Creativi selezionati nel network the[name]" />
-      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:20 }}>
-        <button onClick={() => setShowAdd(true)} style={d.btnPrimary}>+ AGGIUNGI CREATIVO</button>
-      </div>
-      {loading ? <Loading /> : items.length === 0 ? <EmptyBox text="Nessun creativo ancora." /> : (
-        <div style={d.list}>
-          {items.map((item) => (
-            <div key={item.id} style={d.listItem}>
-              <div style={{ ...d.listItemHeader, cursor:"default" }}>
-                <div style={d.listItemLeft}>
-                  {item.foto_url ? <img src={item.foto_url} alt={item.nome} style={d.miniAvatar} /> : <AvatarFallback name={item.nome} />}
-                  <div>
-                    <span style={d.listItemName}>{item.nome}</span>
-                    <span style={d.listItemMeta}>{item.ruolo} · {item.citta}</span>
-                  </div>
-                </div>
-                <div style={d.listItemRight}>
-                  <Chip label={item.visible ? "Visibile" : "Nascosto"} color={item.visible ? "#c8d622" : "#666"} />
-                  <Chip label={item.availability === "available" ? "Disponibile" : "Non disp."} color={item.availability === "available" ? "#4ade80" : "#666"} />
-                  <button onClick={() => setEditing(item)} style={d.editBtn}>Modifica</button>
-                  <button onClick={() => toggleVisible(item.id, item.visible)} style={d.toggleBtn}>{item.visible ? "Nascondi" : "Mostra"}</button>
-                </div>
-              </div>
+            <div className="seeker-field"><label className="seeker-label">Email *</label><input className="seeker-input" type="email" required value={form.email} onChange={e=>set('email',e.target.value)} placeholder="email@brand.com"/></div>
+            <div className="seeker-field">
+              <label className="seeker-label">Cosa stai cercando? *</label>
+              <select className="seeker-select" required value={form.cerca} onChange={e=>set('cerca',e.target.value)}>
+                <option value="">Seleziona il ruolo creativo</option>
+                <option>Photographer</option><option>Fashion Stylist</option><option>Art Director</option>
+                <option>Videomaker</option><option>Model</option><option>Make-up Artist</option>
+                <option>Graphic Designer</option><option>Creative Producer</option><option>Set Designer</option>
+                <option>Content Creator / Social Media Manager</option><option>Digital Artist / AI Artist</option>
+                <option>Piu di un ruolo — specificare nelle note</option>
+              </select>
             </div>
-          ))}
-        </div>
-      )}
-      {(editing || showAdd) && (
-        <CreativeEditModal creative={editing}
-          onClose={() => { setEditing(null); setShowAdd(false); }}
-          onSaved={() => { setEditing(null); setShowAdd(false); load(); }} />
-      )}
+            <div className="seeker-field">
+              <label className="seeker-label">Che tipo di progetto? *</label>
+              <select className="seeker-select" required value={form.progetto} onChange={e=>set('progetto',e.target.value)}>
+                <option value="">Seleziona il tipo di progetto</option>
+                <option>Campagna fotografica</option><option>Campagna video</option><option>Editoriale fashion</option>
+                <option>Lookbook / e-commerce</option><option>Shooting prodotto</option><option>Social media content</option>
+                <option>Evento</option><option>Progetto continuativo</option><option>Altro — specificare nelle note</option>
+              </select>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 32px'}}>
+              <div className="seeker-field"><label className="seeker-label">Data inizio</label><input className="seeker-input" type="date" value={form.dateStart} onChange={e=>set('dateStart',e.target.value)}/></div>
+              <div className="seeker-field"><label className="seeker-label">Data fine</label><input className="seeker-input" type="date" value={form.dateEnd} onChange={e=>set('dateEnd',e.target.value)}/></div>
+            </div>
+            <div className="seeker-field">
+              <label className="seeker-label">Budget indicativo</label>
+              <select className="seeker-select" value={form.budget} onChange={e=>set('budget',e.target.value)}>
+                <option value="">Seleziona range budget</option>
+                <option>Fino a EUR 1.000</option><option>EUR 1.000 — 3.000</option><option>EUR 3.000 — 7.000</option>
+                <option>EUR 7.000 — 15.000</option><option>EUR 15.000 — 30.000</option><option>Oltre EUR 30.000</option><option>Da definire</option>
+              </select>
+            </div>
+            <div className="seeker-field"><label className="seeker-label">Note aggiuntive</label><textarea className="seeker-textarea" value={form.note} onChange={e=>set('note',e.target.value)} placeholder="Brief, requisiti specifici, riferimenti stilistici..."/></div>
+            <button type="submit" className="seeker-submit" disabled={sending||!form.nome||!form.azienda||!form.email||!form.cerca||!form.progetto}>{sending?'Invio in corso...':'Invia richiesta →'}</button>
+            <hr className="seeker-divider"/>
+            <div className="seeker-alt">Preferisci scriverci direttamente?{' '}<a href="mailto:info.findthename@gmail.com">info.findthename@gmail.com</a>{' '}— ti risponderemo entro 24 ore con una selezione di profili su misura.</div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
 
-// ── SEEKERS ──────────────────────────────────────────────────────
-function SeekersTab() {
+function PrivacyPolicy({onClose}) {
+  return (
+    <div className="legal-overlay" onClick={onClose}>
+      <div className="legal-modal" onClick={e=>e.stopPropagation()}>
+        <button className="legal-close" onClick={onClose}>X</button>
+        <div className="legal-title">Privacy Policy</div>
+        <div className="legal-date">Ultimo aggiornamento: Marzo 2025</div>
+        <div className="legal-h2">1. Titolare del trattamento</div>
+        <p className="legal-p">Il titolare del trattamento dei dati personali e <strong>the[name]</strong>, contattabile a: <strong>info.findthename@gmail.com</strong></p>
+        <div className="legal-h2">2. Dati raccolti</div>
+        <p className="legal-p">Tramite il Talent Form raccogliamo: dati anagrafici (nome, eta, citta), dati professionali (ruolo, disponibilita, preferenze), link portfolio, foto di copertina, data e ora di invio.</p>
+        <div className="legal-h2">3. Finalita del trattamento</div>
+        <p className="legal-p">I dati vengono trattati per: gestione candidature, selezione talenti, presentazione profili a clienti tramite piattaforma, adempimenti contrattuali.</p>
+        <div className="legal-h2">4. Base giuridica</div>
+        <p className="legal-p">Consenso esplicito dell'interessato mediante firma della liberatoria nel Talent Form (art. 6, par. 1, lett. a GDPR UE 2016/679).</p>
+        <div className="legal-h2">5. Conservazione dei dati</div>
+        <p className="legal-p">I dati sono conservati per massimo 3 anni dalla raccolta, salvo diversa richiesta o obbligo di legge.</p>
+        <div className="legal-h2">6. Condivisione dei dati</div>
+        <p className="legal-p">I dati non vengono ceduti a terzi senza consenso. Possono essere condivisi con clienti della piattaforma nell'ambito della presentazione del profilo professionale.</p>
+        <div className="legal-h2">7. Diritti dell'interessato</div>
+        <p className="legal-p">Hai il diritto di: accedere ai tuoi dati, richiedere rettifica o cancellazione, opporti al trattamento, revocare il consenso. Scrivi a: <strong>info.findthename@gmail.com</strong></p>
+        <div className="legal-h2">8. Cookie</div>
+        <p className="legal-p">Questo sito utilizza esclusivamente cookie tecnici necessari al funzionamento. Non utilizza cookie di profilazione o tracciamento.</p>
+      </div>
+    </div>
+  );
+}
+
+function TermsOfService({onClose}) {
+  return (
+    <div className="legal-overlay" onClick={onClose}>
+      <div className="legal-modal" onClick={e=>e.stopPropagation()}>
+        <button className="legal-close" onClick={onClose}>X</button>
+        <div className="legal-title">Termini di Servizio</div>
+        <div className="legal-date">Ultimo aggiornamento: Marzo 2025</div>
+        <div className="legal-h2">1. Descrizione del servizio</div>
+        <p className="legal-p">the[name] e una piattaforma che connette professionisti creativi con brand e aziende nel settore moda e comunicazione.</p>
+        <div className="legal-h2">2. Accesso alla piattaforma</div>
+        <p className="legal-p">La partecipazione come creativo richiede la compilazione del Talent Form e l'approvazione del team the[name]. La selezione e curatoriale.</p>
+        <div className="legal-h2">3. Obblighi dei creativi</div>
+        <p className="legal-p">I creativi si impegnano a: fornire informazioni veritiere, essere in possesso dei diritti sui materiali caricati, comunicare variazioni di disponibilita, rispettare gli accordi contrattuali.</p>
+        <div className="legal-h2">4. Obblighi dei seeker</div>
+        <p className="legal-p">I clienti si impegnano a: usare la piattaforma per finalita professionali, rispettare i termini di pagamento, comunicare esclusivamente tramite the[name] con i creativi selezionati.</p>
+        <div className="legal-h2">5. Responsabilita</div>
+        <p className="legal-p">the[name] agisce come intermediario e non e parte dei contratti tra creativi e clienti.</p>
+        <div className="legal-h2">6. Legge applicabile</div>
+        <p className="legal-p">Legge italiana. Foro competente: Tribunale di Firenze. Contatti: <strong>info.findthename@gmail.com</strong></p>
+      </div>
+    </div>
+  );
+}
+
+// ── NUOVO: Tab Richieste Seeker con Match ────────────────────────
+function SeekerRequestsTab({creatives, showToast}) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [matchData, setMatchData] = useState({});
   const [matchLoading, setMatchLoading] = useState(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadRequests(); }, []);
 
-  const load = async () => {
+  async function loadRequests() {
     setLoading(true);
-    const { data } = await supabase.from("seeker_requests").select("*").order("created_at", { ascending: false });
-    setItems(data || []);
+    try {
+      const res = await fetch('/api/seeker-requests');
+      const data = await res.json();
+      setItems(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
     setLoading(false);
-  };
+  }
 
-  const updateStatus = async (id, status) => {
-    await supabase.from("seeker_requests").update({ status }).eq("id", id);
-    await load();
-  };
+  async function updateStatus(id, status) {
+    await fetch('/api/seeker-requests', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,status})});
+    setItems(prev => prev.map(i => i.id===id ? {...i,status} : i));
+    showToast('Stato aggiornato ✓');
+  }
 
-  const doMatch = async (item) => {
+  async function doMatch(item) {
     if (matchData[item.id]) {
-      setMatchData((prev) => { const n = {...prev}; delete n[item.id]; return n; });
+      setMatchData(prev => { const n={...prev}; delete n[item.id]; return n; });
       return;
     }
     setMatchLoading(item.id);
-    const ruoli = (item.cerca||"").split(/[,·\n]/).map(s=>s.trim()).filter(Boolean);
-    let q = supabase.from("creatives").select("*").eq("visible", true);
-    if (ruoli.length > 0) q = q.in("ruolo", ruoli);
-    const { data } = await q.order("availability", { ascending: false });
-    setMatchData((prev) => ({ ...prev, [item.id]: data||[] }));
+    const cercaRuoli = (item.cerca||'').split(/[,·\n]/).map(s=>s.trim()).filter(Boolean);
+    const matched = creatives
+      .filter(c => cercaRuoli.length===0 || cercaRuoli.includes(c.ruolo))
+      .sort((a,b) => (a.availability==='available'?-1:1)-(b.availability==='available'?-1:1));
+    setMatchData(prev => ({...prev,[item.id]:matched}));
     setMatchLoading(null);
-  };
+  }
 
   return (
-    <div>
-      <SectionTitle title="Richieste Seeker" subtitle="Richieste in arrivo dai seeker — fai il match con i creativi" />
-      {loading ? <Loading /> : items.length === 0 ? <EmptyBox text="Nessuna richiesta ancora." /> : (
-        <div style={d.list}>
-          {items.map((item) => (
-            <div key={item.id} style={d.listItem}>
-              <div style={d.listItemHeader} onClick={() => setExpanded(expanded === item.id ? null : item.id)}>
-                <div style={d.listItemLeft}>
-                  <div>
-                    <span style={d.listItemName}>{item.azienda || item.nome}</span>
-                    <span style={d.listItemMeta}>{item.nome} · cerca: <strong style={{color:"#c8d622"}}>{item.cerca}</strong> · {safeDate(item.created_at)}</span>
-                  </div>
-                </div>
-                <div style={d.listItemRight}>
-                  <StatusBadge status={item.status || "new"} />
-                  <span style={d.chevron}>{expanded === item.id ? "▲" : "▼"}</span>
-                </div>
+    <>
+      <div className="admin-section-title">Richieste Seeker</div>
+      <div className="admin-sub">Richieste in arrivo — fai il match con i creativi del network</div>
+      {loading ? (
+        <div className="loading">Caricamento...</div>
+      ) : items.length===0 ? (
+        <div style={{padding:'60px 0',textAlign:'center',opacity:.4,fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontStyle:'italic'}}>Nessuna richiesta ancora.</div>
+      ) : items.map(item => (
+        <div key={item.id} style={{background:'rgba(245,240,235,.04)',border:'1px solid rgba(245,240,235,.08)',marginBottom:8}}>
+          <div style={{padding:'20px 28px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setExpanded(expanded===item.id?null:item.id)}>
+            <div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,color:'var(--off)',marginBottom:2}}>{item.azienda||item.nome}</div>
+              <div style={{fontSize:11,color:'rgba(245,240,235,.35)',fontFamily:"'Archivo Narrow',sans-serif",letterSpacing:1}}>
+                {item.nome} · cerca: <strong style={{color:'var(--lime)'}}>{item.cerca}</strong> · {new Date(item.created_at).toLocaleDateString('it-IT')}
               </div>
-              {expanded === item.id && (
-                <div style={d.listItemBody}>
-                  <div style={d.detailGrid}>
-                    <Detail label="Nome" value={item.nome} />
-                    <Detail label="Email" value={item.email} />
-                    <Detail label="Azienda" value={item.azienda} />
-                    <Detail label="Cerca" value={item.cerca} />
-                    <Detail label="Tipo progetto" value={item.progetto} />
-                    <Detail label="Budget" value={item.budget} />
-                    <Detail label="Date" value={item.date_start ? `${item.date_start} → ${item.date_end}` : "—"} />
-                    <Detail label="Note" value={item.note} span={2} />
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <span style={{fontSize:9,padding:'3px 10px',border:'1px solid',letterSpacing:1.5,textTransform:'uppercase',fontFamily:"'Archivo Narrow',sans-serif",borderColor:item.status==='handled'?'rgba(245,240,235,.25)':'var(--lime)',color:item.status==='handled'?'rgba(245,240,235,.25)':'var(--lime)'}}>{item.status==='handled'?'Gestita':'Nuova'}</span>
+              <span style={{fontSize:9,color:'rgba(245,240,235,.3)'}}>{expanded===item.id?'▲':'▼'}</span>
+            </div>
+          </div>
+          {expanded===item.id && (
+            <div style={{padding:'0 28px 28px',borderTop:'1px solid rgba(245,240,235,.06)'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px 24px',margin:'20px 0'}}>
+                {[['Nome',item.nome],['Email',item.email],['Azienda',item.azienda],['Cerca',item.cerca],['Tipo progetto',item.progetto],['Budget',item.budget],['Date',item.date_start?`${item.date_start} → ${item.date_end}`:'—']].map(([label,value])=>(
+                  <div key={label}>
+                    <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:1,color:'rgba(245,240,235,.3)',fontFamily:"'Archivo Narrow',sans-serif",marginBottom:3}}>{label}</div>
+                    <div style={{fontSize:13,color:'var(--off)'}}>{value||'—'}</div>
                   </div>
-                  <div style={d.actionRow}>
-                    <button onClick={() => doMatch(item)} style={d.matchBtn} disabled={matchLoading === item.id}>
-                      {matchLoading === item.id ? "Ricerca…" : matchData[item.id] ? "✕ Chiudi match" : "⚡ MATCH"}
-                    </button>
-                    <a href={`mailto:${item.email}?subject=Re: Richiesta — ${item.cerca}`} style={d.emailBtn}>✉ Rispondi</a>
-                    {item.status !== "handled" && <button onClick={() => updateStatus(item.id, "handled")} style={d.btnSecondary}>Segna gestita</button>}
+                ))}
+                {item.note&&<div style={{gridColumn:'span 2'}}><div style={{fontSize:9,textTransform:'uppercase',letterSpacing:1,color:'rgba(245,240,235,.3)',fontFamily:"'Archivo Narrow',sans-serif",marginBottom:3}}>Note</div><div style={{fontSize:13,color:'var(--off)'}}>{item.note}</div></div>}
+              </div>
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:20}}>
+                <button onClick={()=>doMatch(item)} disabled={matchLoading===item.id} style={{padding:'10px 24px',background:'var(--lime)',border:'none',color:'var(--ink)',fontSize:10,letterSpacing:2,textTransform:'uppercase',fontFamily:"'Archivo Narrow',sans-serif",fontWeight:700,cursor:'pointer'}}>
+                  {matchLoading===item.id?'Ricerca...':matchData[item.id]?'✕ Chiudi match':'⚡ MATCH'}
+                </button>
+                <a href={`mailto:${item.email}?subject=Re: Richiesta creativo — ${item.cerca}`} style={{padding:'10px 20px',border:'1px solid rgba(245,240,235,.2)',color:'rgba(245,240,235,.6)',fontSize:10,letterSpacing:2,textTransform:'uppercase',fontFamily:"'Archivo Narrow',sans-serif",textDecoration:'none'}}>✉ Rispondi</a>
+                {item.status!=='handled'&&<button onClick={()=>updateStatus(item.id,'handled')} style={{padding:'10px 20px',border:'1px solid rgba(245,240,235,.15)',background:'none',color:'rgba(245,240,235,.4)',fontSize:10,letterSpacing:2,textTransform:'uppercase',fontFamily:"'Archivo Narrow',sans-serif",cursor:'pointer'}}>Segna gestita</button>}
+              </div>
+              {matchData[item.id]&&(
+                <div style={{background:'rgba(200,214,34,.05)',border:'1px solid rgba(200,214,34,.15)',padding:20}}>
+                  <div style={{fontSize:9,letterSpacing:3,textTransform:'uppercase',fontFamily:"'Archivo Narrow',sans-serif",color:'var(--lime)',marginBottom:16}}>
+                    {matchData[item.id].length===0?'Nessun creativo disponibile per questo ruolo':`${matchData[item.id].length} creativ${matchData[item.id].length===1?'o':'i'} compatibil${matchData[item.id].length===1?'e':'i'}`}
                   </div>
-                  {matchData[item.id] && (
-                    <div style={d.matchResults}>
-                      <p style={d.matchResultsTitle}>
-                        {matchData[item.id].length === 0 ? "Nessun creativo disponibile." : `${matchData[item.id].length} creativo/i compatibile/i`}
-                      </p>
-                      {matchData[item.id].map((c) => (
-                        <div key={c.id} style={d.matchCard}>
-                          <div style={d.listItemLeft}>
-                            {c.foto_url ? <img src={c.foto_url} alt={c.nome} style={d.miniAvatar} /> : <AvatarFallback name={c.nome} small />}
-                            <div>
-                              <span style={{...d.listItemName, color:"#f5f0eb"}}>{c.nome}</span>
-                              <span style={d.listItemMeta}>{c.ruolo} · {c.citta}</span>
-                            </div>
-                          </div>
-                          <div style={d.listItemRight}>
-                            <Chip label={c.availability === "available" ? "Disponibile" : "Non disp."} color={c.availability === "available" ? "#c8d622" : "#666"} />
-                            {c.portfolio && <a href={c.portfolio} target="_blank" rel="noopener noreferrer" style={d.linkBtn}>Portfolio →</a>}
-                          </div>
+                  {matchData[item.id].map(c=>(
+                    <div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid rgba(245,240,235,.06)'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:12}}>
+                        {c.foto_url?<img src={c.foto_url} style={{width:36,height:36,objectFit:'cover',borderRadius:'50%'}} alt={c.nome}/>:<div style={{width:36,height:36,borderRadius:'50%',background:'rgba(200,214,34,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'var(--lime)',fontWeight:600}}>{(c.nome||'?').slice(0,2).toUpperCase()}</div>}
+                        <div>
+                          <div style={{fontSize:14,color:'var(--off)',fontFamily:"'Cormorant Garamond',serif"}}>{c.nome}</div>
+                          <div style={{fontSize:10,color:'rgba(245,240,235,.35)',letterSpacing:1,fontFamily:"'Archivo Narrow',sans-serif"}}>{c.ruolo} · {c.citta}</div>
                         </div>
-                      ))}
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:10}}>
+                        <span style={{fontSize:9,padding:'2px 8px',border:`1px solid ${c.availability==='available'?'var(--lime)':'rgba(245,240,235,.2)'}`,color:c.availability==='available'?'var(--lime)':'rgba(245,240,235,.4)',letterSpacing:1}}>{c.availability==='available'?'Disponibile':'Non disp.'}</span>
+                        {c.portfolio&&<a href={c.portfolio} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:'var(--lime)',textDecoration:'none',letterSpacing:1}}>Portfolio →</a>}
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
-          ))}
+          )}
         </div>
-      )}
+      ))}
+    </>
+  );
+}
+
+
+function AdminGate({onSuccess}) {
+  const [pin,setPin] = useState('');
+  const [error,setError] = useState(false);
+  function check(){
+    if(pin===ADMIN_PIN){onSuccess();}
+    else{setError(true);setPin('');setTimeout(()=>setError(false),2000);}
+  }
+  return (
+    <div className="admin-gate">
+      <div className="admin-gate-box">
+        <div className="admin-gate-title">the[name]</div>
+        <div className="admin-gate-sub">accesso riservato</div>
+        <input className="admin-pin-input" type="password" maxLength={6} value={pin}
+          onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&check()}
+          placeholder="····" autoFocus/>
+        {error&&<div className="admin-error">PIN errato</div>}
+        <button className="admin-pin-btn" onClick={check}>Entra →</button>
+      </div>
     </div>
   );
 }
 
-// ── DOCUMENTI ────────────────────────────────────────────────────
-// FIX DEFINITIVO: mounted=false → non renderizza nulla sul server
-// Elimina TUTTI gli errori di hydration React #418/#423/#425
-function DocumentiTab() {
-  const [activeDoc, setActiveDoc] = useState("booking");
+function AdminPanel({onExit}) {
+  const [tab, setTab] = useState('candidature');
+  const [candidatures, setCandidatures] = useState([]);
   const [creatives, setCreatives] = useState([]);
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState('');
+  const [newCreative, setNewCreative] = useState({nome:'',ruolo:'',citta:'',bio:'',tags:'',portfolio:'',availability:'available'});
+  const [creativesSearch, setCreativesSearch] = useState('');
+  const [doc, setDoc] = useState('booking');
+  const [output, setOutput] = useState('');
+  const [bc, setBc] = useState({docNum:'',docDate:'',projectName:'',serviceDate:'',serviceLocation:'',revisions:'',projectDesc:'',clientName:'',clientContact:'',clientEmail:'',clientVat:'',t1Name:'',t1Role:'',t1Fee:'',t2Name:'',t2Role:'',t2Fee:'',t3Name:'',t3Role:'',t3Fee:'',agencyFee:'',agencyIban:'',agencyVat:'',agencySignatory:'',usageRights:'',territory:'',duration:'',exclusivity:'No',paymentTerms:'30',sigPlace:''});
+  const sb = (k,v) => setBc(p=>({...p,[k]:v}));
+  const [q, setQ] = useState({docNum:'',quotDate:'',validity:'',clientName:'',clientContact:'',projectName:'',projectDesc:'',contentOutput:'',usageRights:'',artDir:'',prodTeam:'',photo:'',video:'',stylist:'',stylistAss:'',shopping:'',mua:'',models:'',equipment:'',digital:'',graphic:'',location:'',insurance:'',contingency:'',extraItem:'',extraCost:'',totalProd:'',agencyFeePct:'',agencyFee:'',totalNet:'',vat:'',totalGross:'',timeCreative:'',timePreprod:'',timeProd:'',timePost:'',timeTotal:'',revisions:'',usageDuration:'',sigPlace:''});
+  const sq = (k,v) => setQ(p=>({...p,[k]:v}));
+  const [nda, setNda] = useState({disclosingParty:'',disclosingEmail:'',receivingParty:'',receivingEmail:'',projectName:'',projectDesc:'',ndaDuration:'2',jurisdiction:'Firenze',docDate:'',sigPlace:''});
+  const sn = (k,v) => setNda(p=>({...p,[k]:v}));
+  const [lic, setLic] = useState({licenseNumber:'',licDate:'',talentName:'',talentEmail:'',clientName:'',clientEmail:'',contentDesc:'',productionDate:'',projectName:'',fileCount:'',fileFormats:'',exclusivity:'No',licenseType:'',usageMedia:'',territory:'',usageDuration:'',outputFormats:'',licenseFee:'',paymentDueDate:'',jurisdiction:'Firenze',sigPlace:''});
+  const sl = (k,v) => setLic(p=>({...p,[k]:v}));
 
-  useEffect(() => {
-    setMounted(true);
-    supabase.from("creatives").select("id, nome, ruolo, citta").eq("visible", true)
-      .order("nome", { ascending: true })
-      .then(({ data }) => setCreatives(data || []));
-  }, []);
+  function DocDiv({text}) {
+    return <div style={{fontSize:9,letterSpacing:3,textTransform:'uppercase',fontFamily:"'Archivo Narrow',sans-serif",color:'var(--lime)',opacity:.5,margin:'28px 0 16px',paddingTop:20,borderTop:'1px solid rgba(245,240,235,.06)'}}>{text}</div>;
+  }
+  function DocF({label,k,obj,setter,placeholder='',type='text'}) {
+    return (<div className="admin-group"><label className="admin-label">{label}</label><input className="admin-input" type={type} value={obj[k]||''} onChange={e=>setter(k,e.target.value)} placeholder={placeholder}/></div>);
+  }
+  function DocFF({label,k,obj,setter,placeholder=''}) {
+    return (<div className="admin-group full"><label className="admin-label">{label}</label><input className="admin-input" value={obj[k]||''} onChange={e=>setter(k,e.target.value)} placeholder={placeholder}/></div>);
+  }
+  function DocT({label,k,obj,setter}) {
+    return (<div className="admin-group full"><label className="admin-label">{label}</label><textarea className="admin-textarea" value={obj[k]||''} onChange={e=>setter(k,e.target.value)}/></div>);
+  }
+  function DocS({label,k,obj,setter,options}) {
+    return (<div className="admin-group"><label className="admin-label">{label}</label><select className="admin-select" value={obj[k]||''} onChange={e=>setter(k,e.target.value)}>{options.map(o=><option key={o}>{o}</option>)}</select></div>);
+  }
 
-  // Sul server → null. Sul client dopo mount → form completo.
-  if (!mounted) return null;
+  function generateBooking() {
+    const total = [bc.t1Fee,bc.t2Fee,bc.t3Fee,bc.agencyFee].filter(Boolean).reduce((a,b)=>a+parseFloat(b||0),0);
+    setOutput(`BOOKING CONFIRMATION — the[name]\nDoc: ${bc.docNum} · Data: ${bc.docDate}\n\nPROGETTO: ${bc.projectName}\nData servizio: ${bc.serviceDate} · Luogo: ${bc.serviceLocation}\nRevisioni incluse: ${bc.revisions}\nDescrizione: ${bc.projectDesc}\n\nCLIENTE: ${bc.clientName} · ${bc.clientContact}\nEmail: ${bc.clientEmail} · P.IVA: ${bc.clientVat}\n\nCREATIVI:${bc.t1Name?`\n· ${bc.t1Name} — ${bc.t1Role} — EUR ${bc.t1Fee}`:''}${bc.t2Name?`\n· ${bc.t2Name} — ${bc.t2Role} — EUR ${bc.t2Fee}`:''}${bc.t3Name?`\n· ${bc.t3Name} — ${bc.t3Role} — EUR ${bc.t3Fee}`:''}\n\nFEE AGENZIA: EUR ${bc.agencyFee}\nTOTALE: EUR ${total}\nIBAN: ${bc.agencyIban} · P.IVA: ${bc.agencyVat}\nFirmatario: ${bc.agencySignatory}\n\nDIRITTI: ${bc.usageRights} · ${bc.territory} · ${bc.duration} · Esclusiva: ${bc.exclusivity}\nPagamento: ${bc.paymentTerms} giorni\n\nFirmato a ${bc.sigPlace}, il ___________\n\nthe[name] _______________     ${bc.clientName} _______________`);
+  }
+  function generateQuotation() {
+    setOutput(`PRODUCTION QUOTATION — the[name]\nPreventivo: ${q.docNum} · Data: ${q.quotDate} · Validità: ${q.validity}\n\nCLIENTE: ${q.clientName} · ${q.clientContact}\nPROGETTO: ${q.projectName}\n${q.projectDesc}\nOutput: ${q.contentOutput}\nUsage: ${q.usageRights}\n\nVOCI DI BUDGET (EUR escluso IVA):\n· Direzione Artistica: ${q.artDir}\n· Production team: ${q.prodTeam}\n· Fotografo+Crew+Post: ${q.photo}\n· Video+Crew+Post: ${q.video}\n· Stylist: ${q.stylist} · Ass: ${q.stylistAss} · Shopping: ${q.shopping}\n· MUA+Hair: ${q.mua} · Modelli: ${q.models}\n· Attrezzatura: ${q.equipment} · Digital: ${q.digital} · Graphic: ${q.graphic}\n· Location: ${q.location} · Assicurazione: ${q.insurance}\n· Imprevisti 5%: ${q.contingency}${q.extraItem?`\n· ${q.extraItem}: ${q.extraCost}`:''}\n\nTotale produzione: EUR ${q.totalProd}\nAgency fee ${q.agencyFeePct}%: EUR ${q.agencyFee}\nTotale imponibile: EUR ${q.totalNet}\nIVA 22%: EUR ${q.vat}\nTOTALE IVA INCLUSA: EUR ${q.totalGross}\n\nTEMPISTICHE: Totale ${q.timeTotal} · Revisioni: ${q.revisions}\nDurata diritti: ${q.usageDuration}\n\nFirmato a ${q.sigPlace}, il ___________`);
+  }
+  function generateNDA() {
+    setOutput(`ACCORDO DI RISERVATEZZA (NDA) — the[name]\nData: ${nda.docDate}\n\nPARTI:\nDivulgante: ${nda.disclosingParty} · ${nda.disclosingEmail}\nRicevente: ${nda.receivingParty} · ${nda.receivingEmail}\n\nPROGETTO: ${nda.projectName}\n${nda.projectDesc}\n\nLe parti si impegnano a mantenere riservate tutte le informazioni condivise nell'ambito della collaborazione descritta, per una durata di ${nda.ndaDuration} anni dalla firma del presente accordo.\n\nForo competente: ${nda.jurisdiction}\n\nFirmato a ${nda.sigPlace}, il ___________\n\n${nda.disclosingParty} _______________     ${nda.receivingParty} _______________`);
+  }
+  function generateLicensing() {
+    setOutput(`IMAGE LICENSING AGREEMENT — the[name]\nLicenza: ${lic.licenseNumber} · Data: ${lic.licDate}\n\nLICENZIANTE: ${lic.talentName} · ${lic.talentEmail}\nLICENZIATARIO: ${lic.clientName} · ${lic.clientEmail}\n\nMATERIALE: ${lic.contentDesc}\nProduzione: ${lic.productionDate} · Progetto: ${lic.projectName}\nFile: ${lic.fileCount} · Formati: ${lic.fileFormats}\n\nUTILIZZO:\nMedia: ${lic.usageMedia} · Territorio: ${lic.territory}\nDurata: ${lic.usageDuration} · Esclusiva: ${lic.exclusivity}\nFormati output: ${lic.outputFormats}\n\nFEE: EUR ${lic.licenseFee} · Scadenza: ${lic.paymentDueDate}\nForo: ${lic.jurisdiction}\n\nFirmato a ${lic.sigPlace}, il ___________\n\n${lic.talentName} _______________     ${lic.clientName} _______________`);
+  }
 
-  const docs = [
-    { id:"booking",   label:"01 · BOOKING CONFIRMATION" },
-    { id:"quotation", label:"02 · PRODUCTION QUOTATION" },
-    { id:"nda",       label:"03 · NDA" },
-    { id:"licensing", label:"04 · IMAGE LICENSING" },
-  ];
+  function printDoc() {
+    const dataMap = {booking:bc,quotation:q,nda:nda,licensing:lic};
+    fetch('/api/pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:doc,data:dataMap[doc]||{}})})
+    .then(r=>r.blob()).then(blob=>{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download=`thename-${doc}-${Date.now()}.pdf`;a.click();URL.revokeObjectURL(url);
+    });
+  }
 
-  return (
-    <div>
-      <SectionTitle title="Documenti" subtitle="GENERA DOCUMENTI PROFESSIONALI THE[NAME]" />
-      <div style={d.docTabs}>
-        {docs.map((doc) => (
-          <button key={doc.id} onClick={() => setActiveDoc(doc.id)}
-            style={{ ...d.docTabBtn, ...(activeDoc === doc.id ? d.docTabActive : {}) }}>
-            {doc.label}
-          </button>
-        ))}
-      </div>
-      {activeDoc === "booking"   && <BookingForm   key="booking"   creatives={creatives} />}
-      {activeDoc === "quotation" && <QuotationForm key="quotation" creatives={creatives} />}
-      {activeDoc === "nda"       && <NDAForm       key="nda"       creatives={creatives} />}
-      {activeDoc === "licensing" && <LicensingForm key="licensing" creatives={creatives} />}
-    </div>
-  );
-}
+  const docStyle = {padding:"10px 20px",background:"none",border:"1px solid rgba(245,240,235,.15)",fontFamily:"'Archivo Narrow',sans-serif",fontSize:10,letterSpacing:2,textTransform:"uppercase",transition:"all .2s",marginRight:8,marginBottom:8};
+  const docStyleActive = {...docStyle,background:"rgba(200,214,34,.08)",borderColor:"var(--lime)",color:"var(--lime)"};
+  const docStyleInactive = {...docStyle,color:"rgba(245,240,235,.4)"};
 
-// ── Stili form condivisi ─────────────────────────────────────────
-const S = {
-  inp:  { width:"100%", padding:"10px 12px", background:"#1a1714", border:"1px solid #2a2520", color:"#f5f0eb", fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit", borderRadius:2 },
-  ro:   { width:"100%", padding:"10px 12px", background:"#111",    border:"1px solid #2a2520", color:"#7a7068", fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit", borderRadius:2 },
-  lbl:  { fontSize:9, letterSpacing:"1px", textTransform:"uppercase", color:"#7a7068", display:"block", marginBottom:6 },
-  sec:  { marginBottom:32, paddingBottom:32, borderBottom:"1px solid #1e1c1a" },
-  grid: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 },
-};
-
-function todayISO() {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`;
-}
-function fmtDate(s) {
-  if (!s) return "—";
-  const [y,m,dd] = s.split("-");
-  return (dd&&m&&y) ? `${dd}/${m}/${y}` : s;
-}
-function pdfField(l,v) { return `<div><div class="fl">${l}</div><div class="fv">${v||"—"}</div></div>`; }
-function pdfBase(title, num, date) {
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-    @page{margin:40px}body{font-family:Arial,sans-serif;color:#0d0b0a;max-width:700px;margin:0 auto;padding:40px}
-    .logo{font-family:Georgia,serif;font-size:36px;font-weight:300;font-style:italic;margin-bottom:4px}
-    .sub{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#7a7068;margin-bottom:40px}
-    .t{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7a7068;margin-bottom:4px}
-    .n{font-size:22px;font-weight:300;margin-bottom:40px}
-    .s{margin-bottom:28px}.sl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#7a7068;border-bottom:1px solid #e8e0d8;padding-bottom:6px;margin-bottom:12px}
-    .g{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .fl{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#7a7068;margin-bottom:4px}
-    .fv{font-size:14px;color:#0d0b0a}
-    .fb{background:#f5f0eb;padding:20px 24px;margin-top:8px}
-    .fr{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e0d8d0;font-size:13px}
-    .fr:last-child{border-bottom:none;font-weight:600;font-size:15px;padding-top:12px}
-    .sg{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:60px}
-    .sl2{border-bottom:1px solid #0d0b0a;margin-top:40px;font-size:11px;color:#7a7068}
-    .ft{margin-top:60px;padding-top:20px;border-top:1px solid #e8e0d8;font-size:10px;color:#aaa}
-  </style></head><body>
-  <div class="logo">the[name]</div><div class="sub">Network · Production Agency</div>
-  <div class="t">${title}</div><div class="n">${num} · ${date}</div>`;
-}
-function openPDF(html) {
-  const w = window.open("","_blank");
-  w.document.write(html + `<div class="ft">the[name] · info.findthename@gmail.com</div></body></html>`);
-  w.document.close();
-  setTimeout(() => w.print(), 500);
-}
-
-// ── 01 · Booking Confirmation ────────────────────────────────────
-function BookingForm({ creatives }) {
-  const rNum  = useRef(null); const rDate = useRef(null);
-  const rPN   = useRef(null); const rSD   = useRef(null); const rLoc  = useRef(null);
-  const rCN   = useRef(null); const rCR   = useRef(null); const rCC   = useRef(null);
-  const rClN  = useRef(null); const rClC  = useRef(null); const rClE  = useRef(null);
-  const rFee  = useRef(null); const rPct  = useRef(null);
-  const rAF   = useRef(null); const rTot  = useRef(null);
-  const rNote = useRef(null);
-
-  useEffect(() => {
-    const now = new Date();
-    if (rDate.current) rDate.current.value = todayISO();
-    if (rNum.current)  rNum.current.value  = `BC-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-  }, []);
-
-  const g = r => r?.current?.value || "";
-
-  const onCreative = e => {
-    const c = creatives.find(x => x.id === e.target.value);
-    if (!c) return;
-    if (rCN.current) rCN.current.value = c.nome||"";
-    if (rCR.current) rCR.current.value = c.ruolo||"";
-    if (rCC.current) rCC.current.value = c.citta||"";
-  };
-
-  const recalc = () => {
-    const fee = parseFloat(g(rFee))||0;
-    const pct = parseFloat(g(rPct))||20;
-    const af  = (fee*pct/100).toFixed(2);
-    const tot = (fee+parseFloat(af)).toFixed(2);
-    if (rAF.current)  rAF.current.value  = af;
-    if (rTot.current) rTot.current.value = tot;
-  };
-
-  const pdf = () => openPDF(pdfBase("Booking Confirmation", g(rNum), fmtDate(g(rDate))) + `
-    <div class="s"><div class="sl">Progetto</div><div class="g">
-      <div>${pdfField("Nome progetto",g(rPN))}</div><div>${pdfField("Data servizio",fmtDate(g(rSD)))}</div>
-      <div style="grid-column:span 2">${pdfField("Location",g(rLoc))}</div>
-    </div></div>
-    <div class="s"><div class="sl">Creativo</div><div class="g">
-      <div>${pdfField("Nome",g(rCN))}</div><div>${pdfField("Ruolo",g(rCR))}</div><div>${pdfField("Città",g(rCC))}</div>
-    </div></div>
-    <div class="s"><div class="sl">Cliente</div><div class="g">
-      <div>${pdfField("Nome",g(rClN))}</div><div>${pdfField("Azienda",g(rClC))}</div>
-      <div style="grid-column:span 2">${pdfField("Email",g(rClE))}</div>
-    </div></div>
-    <div class="s"><div class="sl">Compenso e Fee Agenzia</div><div class="fb">
-      <div class="fr"><span>Compenso creativo</span><span>€ ${g(rFee)||"—"}</span></div>
-      <div class="fr"><span>Fee the[name] (${g(rPct)||20}%)</span><span>€ ${g(rAF)||"—"}</span></div>
-      <div class="fr"><span>Totale dovuto</span><span>€ ${g(rTot)||"—"}</span></div>
-    </div></div>
-    ${g(rNote)?`<div class="s"><div class="sl">Note</div><p style="font-size:14px">${g(rNote)}</p></div>`:""}
-    <div class="sg">
-      <div><div class="fl">the[name]</div><div class="sl2">Firma</div></div>
-      <div><div class="fl">${g(rClN)||"Cliente"}</div><div class="sl2">Firma</div></div>
-    </div>`);
-
-  return (
-    <div style={d.docWrap}>
-      <p style={d.docDesc}>Contratto di ingaggio tra agenzia e cliente</p>
-      <div style={S.sec}><p style={d.docSectionLabel}>AUTO-COMPILA DA CREATIVO</p>
-        <select onChange={onCreative} style={d.docSelect}>
+  function CreativeSelector({onSelect}) {
+    if(!creatives||creatives.length===0) return null;
+    return (
+      <div style={{marginBottom:20,padding:"16px 20px",background:"rgba(200,214,34,.06)",border:"1px solid rgba(200,214,34,.15)"}}>
+        <div style={{fontSize:9,letterSpacing:3,textTransform:"uppercase",fontFamily:"'Archivo Narrow',sans-serif",color:"var(--lime)",opacity:.7,marginBottom:10}}>Auto-compila da creativo nel network</div>
+        <select className="admin-select" defaultValue="" onChange={e=>{const found=creatives.find(c=>c.id===e.target.value);if(found)onSelect(found);}}>
           <option value="">-- Seleziona creativo --</option>
-          {creatives.map(c => <option key={c.id} value={c.id}>{c.nome} · {c.ruolo} · {c.citta}</option>)}
+          {creatives.map(c=>(<option key={c.id} value={c.id}>{c.nome} -- {c.ruolo} -- {c.citta}</option>))}
         </select>
       </div>
-      <div style={S.sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={S.grid}>
-        <div><label style={S.lbl}>N. DOCUMENTO</label><input ref={rNum} style={S.inp} /></div>
-        <div><label style={S.lbl}>DATA</label><input ref={rDate} type="date" style={S.inp} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>PROGETTO</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME PROGETTO</label><input ref={rPN} style={S.inp} placeholder="Campagna SS26" /></div>
-        <div><label style={S.lbl}>DATA SERVIZIO</label><input ref={rSD} type="date" style={S.inp} /></div>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>LOCATION</label><input ref={rLoc} style={S.inp} placeholder="Milano, Studio XYZ" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>CREATIVO</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME</label><input ref={rCN} style={S.inp} placeholder="Nome Cognome" /></div>
-        <div><label style={S.lbl}>RUOLO</label><input ref={rCR} style={S.inp} placeholder="Photographer" /></div>
-        <div><label style={S.lbl}>CITTÀ</label><input ref={rCC} style={S.inp} placeholder="Milano" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>CLIENTE</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME</label><input ref={rClN} style={S.inp} placeholder="Nome Cognome" /></div>
-        <div><label style={S.lbl}>AZIENDA</label><input ref={rClC} style={S.inp} placeholder="Brand S.r.l." /></div>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>EMAIL</label><input ref={rClE} type="email" style={S.inp} placeholder="email@brand.com" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>COMPENSO E FEE AGENZIA</p><div style={S.grid}>
-        <div><label style={S.lbl}>FEE CREATIVO (€)</label><input ref={rFee} style={S.inp} placeholder="1500" onBlur={recalc} /></div>
-        <div><label style={S.lbl}>% FEE THE[NAME]</label><input ref={rPct} defaultValue="20" style={S.inp} onBlur={recalc} /></div>
-        <div><label style={S.lbl}>FEE THE[NAME] (€) — auto</label><input ref={rAF} readOnly style={S.ro} /></div>
-        <div><label style={S.lbl}>TOTALE LORDO (€) — auto</label><input ref={rTot} readOnly style={S.ro} /></div>
-      </div>
-      <p style={{fontSize:10,color:"#7a7068",marginTop:8}}>Inserisci la fee e clicca fuori — il totale si calcola in automatico.</p>
-      </div>
-      <div style={S.sec}><p style={d.docSectionLabel}>NOTE</p>
-        <textarea ref={rNote} rows={3} style={{...S.inp,resize:"vertical",width:"100%"}} placeholder="Note aggiuntive…" />
-      </div>
-      <button onClick={pdf} style={{...d.btnPrimary,marginTop:8}}>↓ GENERA E STAMPA PDF</button>
-    </div>
-  );
-}
+    );
+  }
 
-// ── 02 · Production Quotation ────────────────────────────────────
-function QuotationForm({ creatives }) {
-  const rNum   = useRef(null); const rDate  = useRef(null);
-  const rClN   = useRef(null); const rClRef = useRef(null); const rClE   = useRef(null);
-  const rPN    = useRef(null); const rPD    = useRef(null);
-  const rAD    = useRef(null); const rPH    = useRef(null); const rVID   = useRef(null);
-  const rSTY   = useRef(null); const rMUA   = useRef(null); const rMOD   = useRef(null);
-  const rLOC   = useRef(null); const rEQ    = useRef(null); const rOTH   = useRef(null);
-  const rTP    = useRef(null); const rAP    = useRef(null); const rAF    = useRef(null);
-  const rTN    = useRef(null); const rVAT   = useRef(null); const rTG    = useRef(null);
-  const rUSG   = useRef(null); const rTER   = useRef(null); const rDUR   = useRef(null);
-  const rNote  = useRef(null);
+  useEffect(()=>{ loadData(); },[]);
 
-  useEffect(() => { if (rDate.current) rDate.current.value = todayISO(); }, []);
+  async function loadData() {
+    setLoading(true);
+    try {
+      const [c1,c2] = await Promise.all([
+        fetch('/api/candidatures').then(r=>r.json()),
+        fetch('/api/creatives').then(r=>r.json()),
+      ]);
+      setCandidatures(Array.isArray(c1)?c1:[]);
+      setCreatives(Array.isArray(c2)?c2:[]);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  }
 
-  const g = r => r?.current?.value || "";
+  async function updateStatus(id,status) {
+    await fetch('/api/candidatures',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,status})});
+    setCandidatures(cs=>cs.map(c=>c.id===id?{...c,status}:c));
+    showToast(status==='approved'?'Candidatura approvata ✓':'Candidatura rifiutata');
+  }
 
-  const recalc = () => {
-    const items = [rAD,rPH,rVID,rSTY,rMUA,rMOD,rLOC,rEQ,rOTH];
-    const tot  = items.reduce((s,r) => s+(parseFloat(r?.current?.value)||0), 0);
-    const pct  = parseFloat(g(rAP))||20;
-    const af   = tot*pct/100;
-    const net  = tot+af;
-    const vat  = net*0.22;
-    const gros = net+vat;
-    if(rTP.current)  rTP.current.value  = tot.toFixed(2);
-    if(rAF.current)  rAF.current.value  = af.toFixed(2);
-    if(rTN.current)  rTN.current.value  = net.toFixed(2);
-    if(rVAT.current) rVAT.current.value = vat.toFixed(2);
-    if(rTG.current)  rTG.current.value  = gros.toFixed(2);
-  };
-
-  const pdf = () => openPDF(pdfBase("Production Quotation", g(rNum)||"QT-", fmtDate(g(rDate))) + `
-    <div class="s"><div class="sl">Cliente e Progetto</div><div class="g">
-      ${pdfField("Cliente",g(rClN))}${pdfField("Referente",g(rClRef))}
-      ${pdfField("Email",g(rClE))}${pdfField("Progetto",g(rPN))}
-    </div></div>
-    ${g(rPD)?`<div class="s"><div class="sl">Brief</div><p style="font-size:14px">${g(rPD)}</p></div>`:""}
-    <div class="s"><div class="sl">Budget Voci (€ escluso IVA)</div><div class="g">
-      ${pdfField("Direzione Artistica","€ "+g(rAD))}${pdfField("Fotografo / Post","€ "+g(rPH))}
-      ${pdfField("Video / Post","€ "+g(rVID))}${pdfField("Stylist","€ "+g(rSTY))}
-      ${pdfField("Make-up & Hair","€ "+g(rMUA))}${pdfField("Modelli/e","€ "+g(rMOD))}
-      ${pdfField("Location","€ "+g(rLOC))}${pdfField("Attrezzatura","€ "+g(rEQ))}
-      ${g(rOTH)?pdfField("Altro","€ "+g(rOTH)):""}
-    </div></div>
-    <div class="s"><div class="sl">Riepilogo</div><div class="fb">
-      <div class="fr"><span>Totale produzione</span><span>€ ${g(rTP)}</span></div>
-      <div class="fr"><span>Agency fee the[name] (${g(rAP)||20}%)</span><span>€ ${g(rAF)}</span></div>
-      <div class="fr"><span>Totale imponibile</span><span>€ ${g(rTN)}</span></div>
-      <div class="fr"><span>IVA 22%</span><span>€ ${g(rVAT)}</span></div>
-      <div class="fr"><span>TOTALE IVA INCLUSA</span><span>€ ${g(rTG)}</span></div>
-    </div></div>
-    <div class="s"><div class="sl">Diritti di utilizzo</div><div class="g">
-      ${pdfField("Utilizzi",g(rUSG))}${pdfField("Territorio",g(rTER))}${pdfField("Durata",g(rDUR))}
-    </div></div>
-    ${g(rNote)?`<div class="s"><div class="sl">Note</div><p style="font-size:14px">${g(rNote)}</p></div>`:""}
-    <div class="sg">
-      <div><div class="fl">the[name]</div><div class="sl2">Firma</div></div>
-      <div><div class="fl">${g(rClN)||"Cliente"}</div><div class="sl2">Firma</div></div>
-    </div>`);
-
-  return (
-    <div style={d.docWrap}>
-      <p style={d.docDesc}>Preventivo di produzione dettagliato per brand e clienti</p>
-      <div style={S.sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={S.grid}>
-        <div><label style={S.lbl}>N. PREVENTIVO</label><input ref={rNum} style={S.inp} placeholder="QT-2025-001" /></div>
-        <div><label style={S.lbl}>DATA</label><input ref={rDate} type="date" style={S.inp} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>CLIENTE E PROGETTO</p><div style={S.grid}>
-        <div><label style={S.lbl}>CLIENTE / BRAND</label><input ref={rClN} style={S.inp} placeholder="Brand S.r.l." /></div>
-        <div><label style={S.lbl}>REFERENTE</label><input ref={rClRef} style={S.inp} placeholder="Nome Cognome" /></div>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>EMAIL</label><input ref={rClE} type="email" style={S.inp} placeholder="email@brand.com" /></div>
-        <div><label style={S.lbl}>NOME PROGETTO</label><input ref={rPN} style={S.inp} placeholder="Campagna SS26" /></div>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>BRIEF</label><textarea ref={rPD} rows={3} style={{...S.inp,resize:"vertical"}} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>VOCI DI BUDGET (€ escluso IVA)</p>
-        <p style={{fontSize:10,color:"#7a7068",marginBottom:16}}>Inserisci gli importi e clicca fuori — i totali si calcolano automaticamente.</p>
-        <div style={S.grid}>
-          <div><label style={S.lbl}>DIREZIONE ARTISTICA</label><input ref={rAD}  style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div><label style={S.lbl}>FOTOGRAFO + POST</label>   <input ref={rPH}  style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div><label style={S.lbl}>VIDEO + POST</label>        <input ref={rVID} style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div><label style={S.lbl}>STYLIST</label>             <input ref={rSTY} style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div><label style={S.lbl}>MAKE-UP & HAIR</label>      <input ref={rMUA} style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div><label style={S.lbl}>MODELLI/E</label>           <input ref={rMOD} style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div><label style={S.lbl}>LOCATION</label>            <input ref={rLOC} style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div><label style={S.lbl}>ATTREZZATURA</label>        <input ref={rEQ}  style={S.inp} placeholder="0" onBlur={recalc} /></div>
-          <div style={{gridColumn:"span 2"}}><label style={S.lbl}>ALTRO</label><input ref={rOTH} style={S.inp} placeholder="0" onBlur={recalc} /></div>
-        </div>
-      </div>
-      <div style={S.sec}><p style={d.docSectionLabel}>RIEPILOGO (auto-calcolato)</p><div style={S.grid}>
-        <div><label style={S.lbl}>TOTALE PRODUZIONE (€)</label>  <input ref={rTP}  readOnly style={S.ro} /></div>
-        <div><label style={S.lbl}>% FEE THE[NAME]</label>        <input ref={rAP}  defaultValue="20" style={S.inp} onBlur={recalc} /></div>
-        <div><label style={S.lbl}>FEE THE[NAME] (€)</label>      <input ref={rAF}  readOnly style={S.ro} /></div>
-        <div><label style={S.lbl}>TOTALE IMPONIBILE (€)</label>  <input ref={rTN}  readOnly style={S.ro} /></div>
-        <div><label style={S.lbl}>IVA 22% (€)</label>            <input ref={rVAT} readOnly style={S.ro} /></div>
-        <div><label style={S.lbl}>TOTALE IVA INCLUSA (€)</label> <input ref={rTG}  readOnly style={S.ro} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>DIRITTI DI UTILIZZO</p><div style={S.grid}>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>UTILIZZI CONCESSI</label><input ref={rUSG} style={S.inp} placeholder="Social, Web, Stampa" /></div>
-        <div><label style={S.lbl}>TERRITORIO</label><input ref={rTER} style={S.inp} placeholder="Italia" /></div>
-        <div><label style={S.lbl}>DURATA</label>    <input ref={rDUR} style={S.inp} placeholder="12 mesi" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>NOTE</p>
-        <textarea ref={rNote} rows={3} style={{...S.inp,width:"100%",resize:"vertical"}} placeholder="Note aggiuntive..." />
-      </div>
-      <button onClick={pdf} style={{...d.btnPrimary,marginTop:8}}>↓ GENERA E STAMPA PDF</button>
-    </div>
-  );
-}
-
-// ── 03 · NDA ─────────────────────────────────────────────────────
-function NDAForm({ creatives }) {
-  const rNum  = useRef(null); const rDate = useRef(null);
-  const rP1N  = useRef(null); const rP1E  = useRef(null);
-  const rP2N  = useRef(null); const rP2E  = useRef(null);
-  const rPN   = useRef(null); const rPD   = useRef(null);
-  const rDur  = useRef(null); const rJur  = useRef(null); const rNote = useRef(null);
-
-  useEffect(() => { if (rDate.current) rDate.current.value = todayISO(); }, []);
-
-  const g = r => r?.current?.value || "";
-
-  const onCreative = e => {
-    const c = creatives.find(x => x.id === e.target.value);
-    if (c && rP2N.current) rP2N.current.value = c.nome||"";
-  };
-
-  const pdf = () => openPDF(pdfBase("Accordo di Riservatezza — NDA", g(rNum)||"NDA-", fmtDate(g(rDate))) + `
-    <div class="s"><div class="sl">Parti</div><div class="g">
-      ${pdfField("Parte Divulgante",g(rP1N))}${pdfField("Email",g(rP1E))}
-      ${pdfField("Parte Ricevente",g(rP2N))}${pdfField("Email",g(rP2E))}
-    </div></div>
-    <div class="s"><div class="sl">Progetto</div><div class="g">
-      ${pdfField("Nome progetto",g(rPN))}
-      ${g(rPD)?`<div style="grid-column:span 2">${pdfField("Descrizione",g(rPD))}</div>`:""}
-    </div></div>
-    <div class="s"><div class="sl">Condizioni</div>
-      <p style="font-size:14px;line-height:1.8">Le parti si impegnano a mantenere riservate tutte le informazioni condivise per una durata di <strong>${g(rDur)||"2"} anni</strong> dalla firma.</p>
-    </div>
-    <div class="g" style="margin-bottom:28px">
-      ${pdfField("Durata riservatezza",g(rDur)+" anni")}${pdfField("Foro competente",g(rJur)||"Firenze")}
-    </div>
-    ${g(rNote)?`<div class="s"><div class="sl">Note</div><p style="font-size:14px">${g(rNote)}</p></div>`:""}
-    <div class="sg">
-      <div><div class="fl">${g(rP1N)||"Parte Divulgante"}</div><div class="sl2">Firma e data</div></div>
-      <div><div class="fl">${g(rP2N)||"Parte Ricevente"}</div><div class="sl2">Firma e data</div></div>
-    </div>`);
-
-  return (
-    <div style={d.docWrap}>
-      <p style={d.docDesc}>Accordo di riservatezza per brief, strategie e materiali inediti</p>
-      <div style={S.sec}><p style={d.docSectionLabel}>AUTO-COMPILA DA CREATIVO</p>
-        <select onChange={onCreative} style={d.docSelect}>
-          <option value="">-- Seleziona creativo (parte ricevente) --</option>
-          {creatives.map(c => <option key={c.id} value={c.id}>{c.nome} · {c.ruolo}</option>)}
-        </select>
-      </div>
-      <div style={S.sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={S.grid}>
-        <div><label style={S.lbl}>N. DOCUMENTO</label><input ref={rNum} style={S.inp} placeholder="NDA-2025-001" /></div>
-        <div><label style={S.lbl}>DATA</label><input ref={rDate} type="date" style={S.inp} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>PARTE DIVULGANTE</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME / AZIENDA</label><input ref={rP1N} style={S.inp} placeholder="Brand S.r.l." /></div>
-        <div><label style={S.lbl}>EMAIL</label>          <input ref={rP1E} type="email" style={S.inp} placeholder="email@brand.com" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>PARTE RICEVENTE</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME</label>  <input ref={rP2N} style={S.inp} placeholder="Nome Cognome" /></div>
-        <div><label style={S.lbl}>EMAIL</label> <input ref={rP2E} type="email" style={S.inp} placeholder="email@studio.com" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>PROGETTO</p><div style={S.grid}>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>NOME PROGETTO</label><input ref={rPN} style={S.inp} placeholder="Campagna SS26" /></div>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>DESCRIZIONE</label><textarea ref={rPD} rows={3} style={{...S.inp,resize:"vertical"}} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>CONDIZIONI</p><div style={S.grid}>
-        <div><label style={S.lbl}>DURATA (anni)</label>       <input ref={rDur} defaultValue="2" style={S.inp} /></div>
-        <div><label style={S.lbl}>FORO COMPETENTE</label>     <input ref={rJur} defaultValue="Firenze" style={S.inp} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>NOTE</p>
-        <textarea ref={rNote} rows={3} style={{...S.inp,width:"100%",resize:"vertical"}} placeholder="Note aggiuntive..." />
-      </div>
-      <button onClick={pdf} style={{...d.btnPrimary,marginTop:8}}>↓ GENERA E STAMPA PDF</button>
-    </div>
-  );
-}
-
-// ── 04 · Image Licensing ─────────────────────────────────────────
-function LicensingForm({ creatives }) {
-  const rNum  = useRef(null); const rDate = useRef(null);
-  const rTN   = useRef(null); const rTE   = useRef(null);
-  const rClN  = useRef(null); const rClE  = useRef(null);
-  const rPN   = useRef(null); const rDesc = useRef(null);
-  const rSD   = useRef(null); const rFC   = useRef(null); const rFF  = useRef(null);
-  const rMED  = useRef(null); const rTER  = useRef(null); const rDUR = useRef(null);
-  const rEXC  = useRef(null); const rFEE  = useRef(null); const rPD  = useRef(null);
-  const rJUR  = useRef(null); const rNote = useRef(null);
-
-  useEffect(() => { if (rDate.current) rDate.current.value = todayISO(); }, []);
-
-  const g = r => r?.current?.value || "";
-
-  const onCreative = e => {
-    const c = creatives.find(x => x.id === e.target.value);
-    if (c && rTN.current) rTN.current.value = c.nome||"";
-  };
-
-  const pdf = () => openPDF(pdfBase("Image Licensing Agreement", g(rNum)||"LIC-", fmtDate(g(rDate))) + `
-    <div class="s"><div class="sl">Parti</div><div class="g">
-      ${pdfField("Licenziante (Creativo)",g(rTN))}${pdfField("Email creativo",g(rTE))}
-      ${pdfField("Licenziatario (Cliente)",g(rClN))}${pdfField("Email cliente",g(rClE))}
-    </div></div>
-    <div class="s"><div class="sl">Materiale Licenziato</div><div class="g">
-      ${pdfField("Progetto",g(rPN))}${pdfField("Data produzione",fmtDate(g(rSD)))}
-      <div style="grid-column:span 2">${pdfField("Descrizione contenuto",g(rDesc))}</div>
-      ${pdfField("N. file",g(rFC))}${pdfField("Formati",g(rFF))}
-    </div></div>
-    <div class="s"><div class="sl">Termini di Utilizzo</div><div class="g">
-      <div style="grid-column:span 2">${pdfField("Media / Canali",g(rMED))}</div>
-      ${pdfField("Territorio",g(rTER))}${pdfField("Durata",g(rDUR))}
-      ${pdfField("Esclusiva",g(rEXC)||"No")}
-    </div></div>
-    <div class="s"><div class="sl">Corrispettivo</div><div class="fb">
-      <div class="fr"><span>Fee licenza</span><span>€ ${g(rFEE)||"—"}</span></div>
-      <div class="fr"><span>Scadenza pagamento</span><span>${fmtDate(g(rPD))}</span></div>
-    </div></div>
-    <div class="g" style="margin-bottom:28px">${pdfField("Foro competente",g(rJUR)||"Firenze")}</div>
-    ${g(rNote)?`<div class="s"><div class="sl">Note</div><p style="font-size:14px">${g(rNote)}</p></div>`:""}
-    <div class="sg">
-      <div><div class="fl">${g(rTN)||"Creativo"}</div><div class="sl2">Firma e data</div></div>
-      <div><div class="fl">${g(rClN)||"Cliente"}</div><div class="sl2">Firma e data</div></div>
-    </div>`);
-
-  return (
-    <div style={d.docWrap}>
-      <p style={d.docDesc}>Licenza di utilizzo immagini e contenuti prodotti dai creativi</p>
-      <div style={S.sec}><p style={d.docSectionLabel}>AUTO-COMPILA DA CREATIVO</p>
-        <select onChange={onCreative} style={d.docSelect}>
-          <option value="">-- Seleziona creativo (licenziante) --</option>
-          {creatives.map(c => <option key={c.id} value={c.id}>{c.nome} · {c.ruolo}</option>)}
-        </select>
-      </div>
-      <div style={S.sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={S.grid}>
-        <div><label style={S.lbl}>N. LICENZA</label><input ref={rNum} style={S.inp} placeholder="LIC-2025-001" /></div>
-        <div><label style={S.lbl}>DATA</label><input ref={rDate} type="date" style={S.inp} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>LICENZIANTE (CREATIVO)</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME</label>  <input ref={rTN} style={S.inp} placeholder="Nome Cognome" /></div>
-        <div><label style={S.lbl}>EMAIL</label> <input ref={rTE} type="email" style={S.inp} placeholder="email@creativo.com" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>LICENZIATARIO (CLIENTE)</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME / AZIENDA</label><input ref={rClN} style={S.inp} placeholder="Brand S.r.l." /></div>
-        <div><label style={S.lbl}>EMAIL</label>          <input ref={rClE} type="email" style={S.inp} placeholder="email@brand.com" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>MATERIALE LICENZIATO</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME PROGETTO</label>       <input ref={rPN}  style={S.inp} placeholder="Campagna SS26" /></div>
-        <div><label style={S.lbl}>DATA PRODUZIONE</label>     <input ref={rSD}  type="date" style={S.inp} /></div>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>DESCRIZIONE CONTENUTO</label><textarea ref={rDesc} rows={3} style={{...S.inp,resize:"vertical"}} /></div>
-        <div><label style={S.lbl}>NUMERO FILE</label>  <input ref={rFC} style={S.inp} placeholder="Es. 30" /></div>
-        <div><label style={S.lbl}>FORMATI</label>       <input ref={rFF} style={S.inp} placeholder="JPG, TIFF, RAW" /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>TERMINI DI UTILIZZO</p><div style={S.grid}>
-        <div style={{gridColumn:"span 2"}}><label style={S.lbl}>MEDIA / CANALI</label><input ref={rMED} style={S.inp} placeholder="Social, Web, Stampa" /></div>
-        <div><label style={S.lbl}>TERRITORIO</label><input ref={rTER} style={S.inp} placeholder="Italia" /></div>
-        <div><label style={S.lbl}>DURATA</label>    <input ref={rDUR} style={S.inp} placeholder="12 mesi" /></div>
-        <div><label style={S.lbl}>ESCLUSIVA</label>
-          <select ref={rEXC} style={{...S.inp,cursor:"pointer"}}>
-            <option value="No">No</option><option value="Si">Si</option>
-          </select>
-        </div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>CORRISPETTIVO</p><div style={S.grid}>
-        <div><label style={S.lbl}>FEE LICENZA (€)</label>        <input ref={rFEE} style={S.inp} placeholder="2000" /></div>
-        <div><label style={S.lbl}>SCADENZA PAGAMENTO</label>     <input ref={rPD}  type="date" style={S.inp} /></div>
-        <div><label style={S.lbl}>FORO COMPETENTE</label>        <input ref={rJUR} defaultValue="Firenze" style={S.inp} /></div>
-      </div></div>
-      <div style={S.sec}><p style={d.docSectionLabel}>NOTE</p>
-        <textarea ref={rNote} rows={3} style={{...S.inp,width:"100%",resize:"vertical"}} placeholder="Note aggiuntive..." />
-      </div>
-      <button onClick={pdf} style={{...d.btnPrimary,marginTop:8}}>↓ GENERA E STAMPA PDF</button>
-    </div>
-  );
-}
-
-// ── Modal creativo ───────────────────────────────────────────────
-function CreativeEditModal({ creative, onClose, onSaved }) {
-  const isNew = !creative;
-  const [form, setForm] = useState({
-    nome: creative?.nome||"", ruolo: creative?.ruolo||"", citta: creative?.citta||"",
-    bio: creative?.bio||"", portfolio: creative?.portfolio||"", foto_url: creative?.foto_url||"",
-    availability: creative?.availability||"available", visible: creative?.visible??true,
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const set = (k,v) => setForm(p => ({...p,[k]:v}));
-
-  const save = async () => {
-    if (!form.nome||!form.ruolo) { setError("Nome e ruolo sono obbligatori."); return; }
-    setSaving(true); setError(null);
-    const payload = {...form, tags:[form.ruolo]};
-    const res = await fetch("/api/creatives", {
-      method: isNew?"POST":"PATCH",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(isNew?payload:{...payload,id:creative.id}),
+  async function promoteToCreative(cand) {
+    // Usa promote:true → il PATCH handler inserisce in creatives UNA SOLA VOLTA
+    const res = await fetch('/api/candidatures', {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id: cand.id, status: 'approved', promote: true }),
     });
     const json = await res.json();
-    if (!res.ok) { setError(json.error||"Errore."); setSaving(false); return; }
-    setSaving(false); onSaved();
-  };
+    if (!res.ok) { alert('Errore: ' + (json.error || 'operazione fallita')); return; }
+    await loadData();
+    showToast('Creativo accettato e aggiunto al network ✓');
+  }
+
+  async function addCreative() {
+    if(!newCreative.nome) return;
+    await fetch('/api/creatives',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...newCreative,visible:true})});
+    setNewCreative({nome:'',ruolo:'',citta:'',bio:'',tags:'',portfolio:'',availability:'available'});
+    await loadData();
+    showToast('Creativo aggiunto ✓');
+  }
+
+  async function removeCreative(id) {
+    if(!window.confirm('Rimuovere questo creativo dalla piattaforma?')) return;
+    await fetch('/api/creatives',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+    await loadData();
+    showToast('Creativo rimosso');
+  }
+
+  function showToast(msg){setToast(msg);setTimeout(()=>setToast(''),2500);}
+
+  function downloadPDF(c) {
+    fetch('/api/pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'candidatura',data:c})})
+    .then(r=>r.blob()).then(blob=>{
+      const url=URL.createObjectURL(blob);const a=document.createElement('a');
+      a.href=url;a.download=`thename-candidatura-${(c.nome||'').replace(/\s+/g,'-')}.pdf`;a.click();URL.revokeObjectURL(url);
+    });
+  }
 
   return (
-    <div style={d.overlay} onClick={e => e.target===e.currentTarget&&onClose()}>
-      <div style={d.modal}>
-        <button onClick={onClose} style={d.closeBtn}>✕</button>
-        <h2 style={d.modalTitle}>{isNew?"Nuovo creativo":`Modifica — ${creative.nome}`}</h2>
-        <div style={d.formGrid}>
-          <MField label="Nome *" value={form.nome} onChange={v=>set("nome",v)} />
-          <div>
-            <label style={d.label}>Ruolo *</label>
-            <select value={form.ruolo} onChange={e=>set("ruolo",e.target.value)} style={d.input}>
-              <option value="">Seleziona ruolo</option>
-              {RUOLI.map(r=><option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-          <MField label="Città" value={form.citta} onChange={v=>set("citta",v)} />
-          <div>
-            <label style={d.label}>Disponibilità</label>
-            <select value={form.availability} onChange={e=>set("availability",e.target.value)} style={d.input}>
-              <option value="available">Disponibile</option>
-              <option value="unavailable">Non disponibile</option>
-            </select>
-          </div>
-          <div style={{gridColumn:"span 2"}}>
-            <label style={d.label}>Bio</label>
-            <textarea value={form.bio} onChange={e=>set("bio",e.target.value)} rows={3} style={{...d.input,resize:"vertical"}} />
-          </div>
-          <MField label="Portfolio URL" value={form.portfolio} onChange={v=>set("portfolio",v)} span={2} />
-          <MField label="Foto URL" value={form.foto_url} onChange={v=>set("foto_url",v)} span={2} />
-          <div>
-            <label style={d.label}>Visibile</label>
-            <select value={form.visible?"yes":"no"} onChange={e=>set("visible",e.target.value==="yes")} style={d.input}>
-              <option value="yes">Sì</option><option value="no">No</option>
-            </select>
-          </div>
+    <>
+      <div className="admin-topbar">
+        <div className="admin-nav">
+          <div className="admin-nav-title">the[name] · admin</div>
+          <button className="admin-nav-exit" onClick={onExit}>← Esci</button>
         </div>
-        {error && <p style={d.errorText}>{error}</p>}
-        <button onClick={save} disabled={saving} style={{...d.btnPrimary,width:"100%",marginTop:20}}>
-          {saving?"Salvataggio…":isNew?"Crea creativo":"Salva modifiche"}
-        </button>
+        <div className="admin-tabs">
+          {[['candidature','Candidature'],['network','Network'],['richieste','Richieste Seeker'],['documenti','Documenti']].map(([key,label])=>(
+            <button key={key} className={`admin-tab${tab===key?' active':''}`} onClick={()=>setTab(key)}>{label}</button>
+          ))}
+        </div>
       </div>
-    </div>
+      <div className="admin-panel">
+        <div className="admin-content">
+          {tab==='candidature' && (
+            <>
+              <div className="admin-section-title">Candidature</div>
+              <div className="admin-sub">{candidatures.length} candidature ricevute</div>
+              {loading?<div className="loading">Caricamento...</div>:candidatures.map(c=>(
+                <div key={c.id} className="cand-card">
+                  <div style={{flex:1}}>
+                    <div className="cand-name">{c.nome}</div>
+                    <div className="cand-meta">{c.citta} · {c.submission_date}</div>
+                    <div>{(c.ruoli||'').split(',').map(r=><span key={r} className="cand-role-tag">{r.trim()}</span>)}</div>
+                    {c.portfolio&&<div style={{fontSize:12,marginTop:8,color:'rgba(245,240,235,.4)'}}>{c.portfolio}</div>}
+                    <div style={{marginTop:12}}><span className={`status-badge status-${c.status||'pending'}`}>{c.status||'pending'}</span></div>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end'}}>
+                    {c.foto_url&&<img src={c.foto_url} style={{width:64,height:64,objectFit:'cover',marginBottom:8}} alt="foto"/>}
+                    <button className="btn-approve" onClick={()=>promoteToCreative(c)}>✓ Accetta al network →</button>
+                    <button className="btn-reject" onClick={()=>updateStatus(c.id,'rejected')}>Rifiuta</button>
+                    <button className="admin-copy-btn" onClick={()=>downloadPDF(c)}>PDF</button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+          {tab==='network' && (
+            <>
+              <div className="admin-section-title">Network</div>
+              <div className="admin-sub">Aggiungi e gestisci creativi</div>
+              <div style={{marginBottom:40,padding:32,background:'rgba(245,240,235,.04)',border:'1px solid rgba(245,240,235,.08)'}}>
+                <div style={{fontSize:11,letterSpacing:2,color:'var(--lime)',fontFamily:"'Archivo Narrow',sans-serif",textTransform:'uppercase',marginBottom:20}}>Aggiungi creativo manualmente</div>
+                <div className="admin-form-grid">
+                  <div className="admin-group"><label className="admin-label">Nome</label><input className="admin-input" value={newCreative.nome} onChange={e=>setNewCreative(p=>({...p,nome:e.target.value}))} placeholder="Nome Cognome"/></div>
+                  <div className="admin-group"><label className="admin-label">Ruolo</label><input className="admin-input" value={newCreative.ruolo} onChange={e=>setNewCreative(p=>({...p,ruolo:e.target.value}))} placeholder="Art Director"/></div>
+                  <div className="admin-group"><label className="admin-label">Città</label><input className="admin-input" value={newCreative.citta} onChange={e=>setNewCreative(p=>({...p,citta:e.target.value}))} placeholder="Milano"/></div>
+                  <div className="admin-group"><label className="admin-label">Disponibilità</label>
+                    <select className="admin-select" value={newCreative.availability} onChange={e=>setNewCreative(p=>({...p,availability:e.target.value}))}>
+                      <option value="available">Disponibile</option><option value="partial">Parziale</option><option value="busy">Occupato</option>
+                    </select>
+                  </div>
+                  <div className="admin-group full"><label className="admin-label">Bio</label><textarea className="admin-textarea" value={newCreative.bio} onChange={e=>setNewCreative(p=>({...p,bio:e.target.value}))}/></div>
+                  <div className="admin-group full"><label className="admin-label">Tags (virgola separati)</label><input className="admin-input" value={newCreative.tags} onChange={e=>setNewCreative(p=>({...p,tags:e.target.value}))} placeholder="Fashion, Editorial, Commercial"/></div>
+                  <div className="admin-group full"><label className="admin-label">Portfolio (un link per riga)</label><textarea className="admin-textarea" value={newCreative.portfolio} onChange={e=>setNewCreative(p=>({...p,portfolio:e.target.value}))}/></div>
+                </div>
+                <button className="admin-btn" onClick={addCreative} disabled={!newCreative.nome}>Aggiungi al network →</button>
+              </div>
+              <div>
+                <input className="admin-input" style={{marginBottom:24}} placeholder="Cerca nel network..." value={creativesSearch} onChange={e=>setCreativesSearch(e.target.value)}/>
+                {loading?<div className="loading">Caricamento...</div>:creatives
+                  .filter(c=>!creativesSearch||c.nome?.toLowerCase().includes(creativesSearch.toLowerCase())||c.ruolo?.toLowerCase().includes(creativesSearch.toLowerCase()))
+                  .map(c=>{
+                    const avColor=c.availability==='available'?'var(--lime)':c.availability==='partial'?'var(--sand)':'rgba(245,240,235,.2)';
+                    return (
+                      <div key={c.id} className="admin-creative-card">
+                        <div style={{display:'flex',gap:16,alignItems:'center'}}>
+                          {c.foto_url&&<img src={c.foto_url} style={{width:48,height:48,objectFit:'cover'}} alt="foto"/>}
+                          <div><div className="admin-creative-name">{c.nome}</div><div className="admin-creative-meta"><span className="avail-dot" style={{background:avColor}}/>{c.ruolo} · {c.citta}</div></div>
+                        </div>
+                        <button className="btn-reject" onClick={()=>removeCreative(c.id)}>Rimuovi</button>
+                      </div>
+                    );
+                  })
+                }
+              </div>
+            </>
+          )}
+          {tab==='richieste' && (
+            <SeekerRequestsTab creatives={creatives} showToast={showToast} />
+          )}
+          {tab==='documenti' && (
+            <>
+              <div className="admin-section-title">Documenti</div>
+              <div className="admin-sub">Genera documenti professionali the[name]</div>
+              <div style={{marginBottom:28,flexWrap:"wrap",display:"flex",gap:4}}>
+                {[["booking","01 · Booking Confirmation"],["quotation","02 · Production Quotation"],["nda","03 · NDA"],["licensing","04 · Image Licensing"]].map(([key,label])=>(
+                  <button key={key} onClick={()=>{setDoc(key);setOutput('');}} style={doc===key?docStyleActive:docStyleInactive}>{label}</button>
+                ))}
+              </div>
+              <div style={{fontSize:12,color:"rgba(245,240,235,.3)",fontFamily:"'Archivo Narrow',sans-serif",letterSpacing:.5,marginBottom:32}}>
+                {doc==="booking"&&"Contratto di ingaggio tra agenzia e cliente per creativi selezionati"}
+                {doc==="quotation"&&"Preventivo di produzione dettagliato per brand e clienti"}
+                {doc==="nda"&&"Accordo di riservatezza per brief, strategie e materiali inediti"}
+                {doc==="licensing"&&"Licenza di utilizzo immagini e contenuti prodotti dai creativi"}
+              </div>
+              {doc==="booking" && (<>
+                <CreativeSelector onSelect={c=>setBc(p=>({...p,t1Name:c.nome||'',t1Role:c.ruolo||''}))}/>
+                <DocDiv text="INTESTAZIONE"/><div className="admin-form-grid"><DocF label="N. Documento" k="docNum" obj={bc} setter={sb} placeholder="BC-2025-001"/><DocF label="Data" k="docDate" obj={bc} setter={sb} type="date"/></div>
+                <DocDiv text="PROGETTO"/><div className="admin-form-grid"><DocF label="Nome progetto" k="projectName" obj={bc} setter={sb} placeholder="Campagna SS26"/><DocF label="Data servizio" k="serviceDate" obj={bc} setter={sb} type="date"/><DocF label="Luogo" k="serviceLocation" obj={bc} setter={sb} placeholder="Milano"/><DocF label="Revisioni incluse" k="revisions" obj={bc} setter={sb} placeholder="3"/><DocT label="Descrizione" k="projectDesc" obj={bc} setter={sb}/></div>
+                <DocDiv text="CLIENTE"/><div className="admin-form-grid"><DocF label="Azienda" k="clientName" obj={bc} setter={sb} placeholder="Brand S.r.l."/><DocF label="Referente" k="clientContact" obj={bc} setter={sb} placeholder="Nome Cognome"/><DocF label="Email" k="clientEmail" obj={bc} setter={sb} placeholder="email@brand.com"/><DocF label="P.IVA" k="clientVat" obj={bc} setter={sb} placeholder="IT00000000000"/></div>
+                <DocDiv text="CREATIVI"/><div className="admin-form-grid"><DocF label="Talent 1 Nome" k="t1Name" obj={bc} setter={sb} placeholder="Elena Visconti"/><DocF label="Ruolo" k="t1Role" obj={bc} setter={sb} placeholder="Art Director"/><DocF label="Compenso EUR" k="t1Fee" obj={bc} setter={sb} placeholder="2.000"/><div/><DocF label="Talent 2 Nome" k="t2Name" obj={bc} setter={sb} placeholder="Marco Aurelio"/><DocF label="Ruolo" k="t2Role" obj={bc} setter={sb} placeholder="Fotografo"/><DocF label="Compenso EUR" k="t2Fee" obj={bc} setter={sb} placeholder="3.000"/><div/><DocF label="Talent 3 Nome" k="t3Name" obj={bc} setter={sb}/><DocF label="Ruolo" k="t3Role" obj={bc} setter={sb}/><DocF label="Compenso EUR" k="t3Fee" obj={bc} setter={sb}/></div>
+                <DocDiv text="FEE AGENZIA"/><div className="admin-form-grid"><DocF label="Fee the[name] EUR" k="agencyFee" obj={bc} setter={sb} placeholder="2.000"/><DocF label="IBAN" k="agencyIban" obj={bc} setter={sb} placeholder="IT00 X000 0000 0000"/><DocF label="P.IVA the[name]" k="agencyVat" obj={bc} setter={sb} placeholder="IT00000000000"/><DocF label="Firmatario" k="agencySignatory" obj={bc} setter={sb} placeholder="Nome Cognome"/></div>
+                <DocDiv text="DIRITTI E UTILIZZI"/><div className="admin-form-grid"><DocFF label="Utilizzi concessi" k="usageRights" obj={bc} setter={sb} placeholder="Social, Web, Stampa"/><DocF label="Territorio" k="territory" obj={bc} setter={sb} placeholder="Italia"/><DocF label="Durata" k="duration" obj={bc} setter={sb} placeholder="24 mesi"/><DocS label="Esclusiva" k="exclusivity" obj={bc} setter={sb} options={["No","Si"]}/><DocS label="Termini pagamento" k="paymentTerms" obj={bc} setter={sb} options={["30","60"]}/><DocF label="Luogo firma" k="sigPlace" obj={bc} setter={sb} placeholder="Firenze"/></div>
+                <button className="admin-btn" onClick={generateBooking} disabled={!bc.clientName}>Genera Booking Confirmation</button>
+              </>)}
+              {doc==="quotation" && (<>
+                <DocDiv text="INTESTAZIONE"/><div className="admin-form-grid"><DocF label="N. Preventivo" k="docNum" obj={q} setter={sq} placeholder="QT-2025-001"/><DocF label="Data" k="quotDate" obj={q} setter={sq} type="date"/><DocF label="Validita" k="validity" obj={q} setter={sq} placeholder="7 giorni"/></div>
+                <DocDiv text="CLIENTE E PROGETTO"/><div className="admin-form-grid"><DocF label="Cliente" k="clientName" obj={q} setter={sq} placeholder="Brand S.r.l."/><DocF label="Referente" k="clientContact" obj={q} setter={sq} placeholder="Nome Cognome"/><DocF label="Nome progetto" k="projectName" obj={q} setter={sq} placeholder="Campagna SS26"/><DocT label="Descrizione" k="projectDesc" obj={q} setter={sq}/><DocT label="Content Output" k="contentOutput" obj={q} setter={sq}/><DocFF label="Usage Rights" k="usageRights" obj={q} setter={sq}/></div>
+                <DocDiv text="BUDGET VOCI (EUR escluso IVA)"/><div className="admin-form-grid"><DocF label="Direzione Artistica" k="artDir" obj={q} setter={sq} placeholder="4.000"/><DocF label="Production team" k="prodTeam" obj={q} setter={sq} placeholder="4.000"/><DocF label="Fotografo + Crew + Post" k="photo" obj={q} setter={sq} placeholder="8.000"/><DocF label="Director + Crew Video + Post" k="video" obj={q} setter={sq} placeholder="4.000"/><DocF label="Stylist" k="stylist" obj={q} setter={sq} placeholder="1.500"/><DocF label="Stylist Assistant" k="stylistAss" obj={q} setter={sq} placeholder="300"/><DocF label="Shopping" k="shopping" obj={q} setter={sq} placeholder="200"/><DocF label="Make-up e Hair" k="mua" obj={q} setter={sq} placeholder="1.200"/><DocF label="Modelli/e" k="models" obj={q} setter={sq} placeholder="4.600"/><DocF label="Attrezzatura extra" k="equipment" obj={q} setter={sq} placeholder="1.000"/><DocF label="Digital specialist" k="digital" obj={q} setter={sq} placeholder="500"/><DocF label="Graphic designer" k="graphic" obj={q} setter={sq} placeholder="500"/><DocF label="Location" k="location" obj={q} setter={sq} placeholder="da quotare"/><DocF label="Assicurazione" k="insurance" obj={q} setter={sq} placeholder="1.500"/><DocF label="Fondo imprevisti 5%" k="contingency" obj={q} setter={sq} placeholder="1.500"/><DocF label="Voce extra (nome)" k="extraItem" obj={q} setter={sq} placeholder="Travel"/><DocF label="Voce extra (importo)" k="extraCost" obj={q} setter={sq} placeholder="800"/></div>
+                <DocDiv text="RIEPILOGO"/><div className="admin-form-grid"><DocF label="Totale produzione" k="totalProd" obj={q} setter={sq} placeholder="70.000"/><DocF label="Agency fee %" k="agencyFeePct" obj={q} setter={sq} placeholder="20"/><DocF label="Agency fee EUR" k="agencyFee" obj={q} setter={sq} placeholder="14.000"/><DocF label="Totale imponibile" k="totalNet" obj={q} setter={sq} placeholder="84.000"/><DocF label="IVA 22%" k="vat" obj={q} setter={sq} placeholder="18.480"/><DocF label="Totale IVA inclusa" k="totalGross" obj={q} setter={sq} placeholder="102.480"/></div>
+                <DocDiv text="TEMPISTICHE"/><div className="admin-form-grid"><DocF label="Fase creativa" k="timeCreative" obj={q} setter={sq} placeholder="2-3 settimane"/><DocF label="Pre-produzione" k="timePreprod" obj={q} setter={sq} placeholder="1-2 settimane"/><DocF label="Produzione" k="timeProd" obj={q} setter={sq} placeholder="1 settimana"/><DocF label="Post-produzione" k="timePost" obj={q} setter={sq} placeholder="2-3 settimane"/><DocF label="Totale" k="timeTotal" obj={q} setter={sq} placeholder="6-9 settimane"/><DocF label="Revisioni incluse" k="revisions" obj={q} setter={sq} placeholder="3"/><DocF label="Durata diritti" k="usageDuration" obj={q} setter={sq} placeholder="12 mesi"/><DocF label="Luogo firma" k="sigPlace" obj={q} setter={sq} placeholder="Firenze"/></div>
+                <button className="admin-btn" onClick={generateQuotation} disabled={!q.clientName}>Genera Production Quotation</button>
+              </>)}
+              {doc==="nda" && (<>
+                <CreativeSelector onSelect={c=>setNda(p=>({...p,receivingParty:c.nome||''}))}/>
+                <DocDiv text="PARTI"/><div className="admin-form-grid"><DocF label="Parte Divulgante" k="disclosingParty" obj={nda} setter={sn} placeholder="Brand S.r.l."/><DocF label="Email Divulgante" k="disclosingEmail" obj={nda} setter={sn} placeholder="email@brand.com"/><DocF label="Parte Ricevente" k="receivingParty" obj={nda} setter={sn} placeholder="Nome Cognome"/><DocF label="Email Ricevente" k="receivingEmail" obj={nda} setter={sn} placeholder="email@studio.com"/></div>
+                <DocDiv text="PROGETTO"/><div className="admin-form-grid"><DocF label="Nome progetto" k="projectName" obj={nda} setter={sn} placeholder="Campagna SS26"/><DocT label="Descrizione collaborazione" k="projectDesc" obj={nda} setter={sn}/></div>
+                <DocDiv text="CONDIZIONI"/><div className="admin-form-grid"><DocF label="Durata riservatezza (anni)" k="ndaDuration" obj={nda} setter={sn} placeholder="2"/><DocF label="Foro competente" k="jurisdiction" obj={nda} setter={sn} placeholder="Firenze"/><DocF label="Data documento" k="docDate" obj={nda} setter={sn} type="date"/><DocF label="Luogo firma" k="sigPlace" obj={nda} setter={sn} placeholder="Firenze"/></div>
+                <button className="admin-btn" onClick={generateNDA} disabled={!nda.disclosingParty||!nda.receivingParty}>Genera NDA</button>
+              </>)}
+              {doc==="licensing" && (<>
+                <CreativeSelector onSelect={c=>setLic(p=>({...p,talentName:c.nome||''}))}/>
+                <DocDiv text="PARTI"/><div className="admin-form-grid"><DocF label="N. Licenza" k="licenseNumber" obj={lic} setter={sl} placeholder="LIC-2025-001"/><DocF label="Data" k="licDate" obj={lic} setter={sl} type="date"/><DocF label="Licenziante (Creativo)" k="talentName" obj={lic} setter={sl} placeholder="Nome Cognome"/><DocF label="Email Creativo" k="talentEmail" obj={lic} setter={sl} placeholder="email@creativo.com"/><DocF label="Licenziatario (Cliente)" k="clientName" obj={lic} setter={sl} placeholder="Brand S.r.l."/><DocF label="Email Cliente" k="clientEmail" obj={lic} setter={sl} placeholder="email@brand.com"/></div>
+                <DocDiv text="CONTENUTO LICENZIATO"/><div className="admin-form-grid"><DocT label="Descrizione materiale" k="contentDesc" obj={lic} setter={sl}/><DocF label="Data produzione" k="productionDate" obj={lic} setter={sl} type="date"/><DocF label="Progetto" k="projectName" obj={lic} setter={sl} placeholder="Campagna SS26"/><DocF label="Numero file" k="fileCount" obj={lic} setter={sl} placeholder="30"/><DocF label="Formati file" k="fileFormats" obj={lic} setter={sl} placeholder="JPG, TIFF, RAW"/></div>
+                <DocDiv text="UTILIZZO E CORRISPETTIVO"/><div className="admin-form-grid"><DocS label="Esclusiva" k="exclusivity" obj={lic} setter={sl} options={["No","Si"]}/><DocF label="Tipo licenza" k="licenseType" obj={lic} setter={sl} placeholder="non esclusiva"/><DocFF label="Media / Canali" k="usageMedia" obj={lic} setter={sl} placeholder="Social, Web, Stampa"/><DocF label="Territorio" k="territory" obj={lic} setter={sl} placeholder="Italia"/><DocF label="Durata" k="usageDuration" obj={lic} setter={sl} placeholder="12 mesi"/><DocF label="Formati uscita" k="outputFormats" obj={lic} setter={sl} placeholder="JPG 300dpi"/><DocF label="Fee EUR" k="licenseFee" obj={lic} setter={sl} placeholder="2.000"/><DocF label="Scadenza pagamento" k="paymentDueDate" obj={lic} setter={sl} type="date"/><DocF label="Foro competente" k="jurisdiction" obj={lic} setter={sl} placeholder="Firenze"/><DocF label="Luogo firma" k="sigPlace" obj={lic} setter={sl} placeholder="Firenze"/></div>
+                <button className="admin-btn" onClick={generateLicensing} disabled={!lic.clientName||!lic.talentName}>Genera Image Licensing Agreement</button>
+              </>)}
+              {output && (
+                <div className="admin-output">
+                  <div className="admin-output-header">
+                    <span className="admin-output-label">{doc==="booking"?"Booking Confirmation":doc==="quotation"?"Production Quotation":doc==="nda"?"NDA — Riservatezza":"Image Licensing"} the[name]</span>
+                    <div style={{display:"flex",gap:8}}>
+                      <button className="admin-copy-btn" onClick={()=>{navigator.clipboard.writeText(output);showToast("copiato");}}>Copia</button>
+                      <button className="admin-copy-btn" onClick={printDoc}>Stampa / PDF</button>
+                    </div>
+                  </div>
+                  {output}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {toast&&<div className="toast">{toast}</div>}
+    </>
   );
 }
 
-// ── Componenti piccoli ───────────────────────────────────────────
-function SectionTitle({title,subtitle}) {
-  return <div style={{marginBottom:28}}>
-    <h2 style={{fontFamily:"Georgia,serif",fontStyle:"italic",fontSize:32,fontWeight:300,color:"#f5f0eb",margin:"0 0 4px"}}>{title}</h2>
-    <p style={{fontSize:10,letterSpacing:"2px",textTransform:"uppercase",color:"#7a7068",margin:0}}>{subtitle}</p>
-  </div>;
-}
-function StatusBadge({status}) {
-  const map={pending:{label:"In attesa",bg:"#3a2f00",color:"#c8d622"},approved:{label:"Approvata",bg:"#0a2a1e",color:"#4ade80"},rejected:{label:"Rifiutata",bg:"#2a0a0a",color:"#f87171"},new:{label:"Nuova",bg:"#0a1a2a",color:"#60a5fa"},handled:{label:"Gestita",bg:"#1a1a1a",color:"#6b7280"}};
-  const c=map[status]||map.pending;
-  return <span style={{fontSize:10,letterSpacing:1,padding:"3px 10px",borderRadius:99,background:c.bg,color:c.color,fontWeight:500}}>{c.label}</span>;
-}
-function Chip({label,color}) { return <span style={{fontSize:10,padding:"3px 10px",borderRadius:99,border:`1px solid ${color}33`,color,letterSpacing:1}}>{label}</span>; }
-function Detail({label,value,span=1}) {
-  return <div style={{gridColumn:`span ${span}`}}>
-    <p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"1px",color:"#7a7068",margin:"0 0 3px"}}>{label}</p>
-    <p style={{fontSize:13,color:"#e8e0d8",margin:0}}>{value||"—"}</p>
-  </div>;
-}
-function MField({label,value,onChange,span=1}) {
-  return <div style={{gridColumn:`span ${span}`}}>
-    <label style={d.label}>{label}</label>
-    <input value={value} onChange={e=>onChange(e.target.value)} style={d.input} />
-  </div>;
-}
-function AvatarFallback({name,small}) {
-  const sz=small?28:36;
-  return <div style={{width:sz,height:sz,borderRadius:"50%",background:"#1a2a1a",color:"#c8d622",display:"flex",alignItems:"center",justifyContent:"center",fontSize:small?10:12,fontWeight:600,flexShrink:0}}>{(name||"?").slice(0,2).toUpperCase()}</div>;
-}
-function Loading() { return <p style={{fontSize:13,color:"#7a7068",textAlign:"center",padding:"2rem"}}>Caricamento…</p>; }
-function EmptyBox({text}) { return <div style={{textAlign:"center",padding:"3rem",border:"1px dashed #2a2a2a",borderRadius:8}}><p style={{fontSize:13,color:"#7a7068",margin:0}}>{text}</p></div>; }
+export default function App() {
+  const [page, setPage] = useState('home');
+  const [cat, setCat] = useState('all');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [showCommunity, setShowCommunity] = useState(false);
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [toast, setToast] = useState('');
+  const [creatives, setCreatives] = useState([]);
+  const [loadingCreatives, setLoadingCreatives] = useState(true);
+  const [lang, setLang] = useState('it');
+  const [cookieAccepted, setCookieAccepted] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showSeekerForm, setShowSeekerForm] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-// ── Stili ────────────────────────────────────────────────────────
-const d = {
-  loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0d0b0a"},
-  loginBox:{background:"#141210",padding:"2.5rem",borderRadius:4,width:360,border:"1px solid #2a2520"},
-  loginLogo:{fontFamily:"Georgia,serif",fontSize:28,fontWeight:300,fontStyle:"italic",color:"#f5f0eb",marginBottom:4},
-  loginSub:{fontSize:9,letterSpacing:"2px",textTransform:"uppercase",color:"#7a7068",marginBottom:32},
-  wrap:{minHeight:"100vh",background:"#0d0b0a",color:"#f5f0eb"},
-  topBar:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 48px",borderBottom:"1px solid #1e1c1a"},
-  topBarLogo:{display:"flex",alignItems:"baseline",gap:0},
-  logoItalic:{fontFamily:"Georgia,serif",fontSize:20,fontStyle:"italic",fontWeight:300,color:"#f5f0eb"},
-  logoDot:{color:"#7a7068"},
-  logoAdmin:{fontSize:11,letterSpacing:"2px",textTransform:"uppercase",color:"#7a7068"},
-  logoutBtn:{fontSize:10,letterSpacing:"1px",textTransform:"uppercase",color:"#7a7068",background:"none",border:"none",cursor:"pointer"},
-  tabs:{display:"flex",gap:0,borderBottom:"1px solid #1e1c1a",padding:"0 48px"},
-  tabBtn:{padding:"16px 24px",border:"none",background:"none",fontSize:10,letterSpacing:"2px",textTransform:"uppercase",color:"#7a7068",cursor:"pointer",borderBottom:"2px solid transparent",marginBottom:-1},
-  tabActive:{color:"#f5f0eb",borderBottomColor:"#c8d622"},
-  content:{padding:"40px 48px",maxWidth:1100},
-  filterBar:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"},
-  filterBtn:{padding:"6px 14px",borderRadius:2,border:"1px solid #2a2520",background:"none",fontSize:10,letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer",display:"flex",alignItems:"center",gap:6,color:"#7a7068"},
-  filterActive:{border:"1px solid #c8d622",color:"#c8d622"},
-  filterCount:{background:"rgba(255,255,255,0.08)",borderRadius:99,padding:"1px 6px",fontSize:10},
-  list:{display:"flex",flexDirection:"column",gap:1},
-  listItem:{border:"1px solid #1e1c1a",background:"#0f0d0c"},
-  listItemHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",cursor:"pointer"},
-  listItemLeft:{display:"flex",alignItems:"center",gap:12},
-  listItemRight:{display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"},
-  listItemName:{fontSize:14,fontWeight:500,display:"block",color:"#f5f0eb"},
-  listItemMeta:{fontSize:11,color:"#7a7068",display:"block",marginTop:2},
-  listItemBody:{padding:"0 20px 20px",borderTop:"1px solid #1e1c1a"},
-  detailGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 20px",margin:"16px 0"},
-  actionRow:{display:"flex",gap:8,marginTop:12,flexWrap:"wrap",alignItems:"center"},
-  miniAvatar:{width:36,height:36,borderRadius:"50%",objectFit:"cover",flexShrink:0},
-  chevron:{fontSize:9,color:"#7a7068",marginLeft:4},
-  linkBtn:{fontSize:11,color:"#c8d622",textDecoration:"none",letterSpacing:"1px"},
-  approveBtn:{padding:"8px 18px",border:"1px solid #c8d622",background:"none",color:"#c8d622",fontSize:10,letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer"},
-  rejectBtn:{padding:"8px 18px",border:"1px solid #f87171",background:"none",color:"#f87171",fontSize:10,letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer"},
-  editBtn:{padding:"5px 12px",border:"1px solid #2a2520",background:"none",fontSize:10,letterSpacing:"1px",cursor:"pointer",color:"#7a7068"},
-  toggleBtn:{padding:"5px 12px",border:"1px solid #2a2520",background:"none",fontSize:10,letterSpacing:"1px",cursor:"pointer",color:"#7a7068"},
-  emailBtn:{padding:"8px 18px",border:"1px solid #60a5fa",background:"none",color:"#60a5fa",fontSize:10,letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer",textDecoration:"none"},
-  matchBtn:{padding:"10px 20px",border:"1px solid #c8d622",background:"#c8d622",color:"#0d0b0a",fontSize:10,letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer",fontWeight:700},
-  matchResults:{marginTop:20,padding:16,background:"#0a0908",border:"1px solid #2a2520",borderRadius:4},
-  matchResultsTitle:{fontSize:10,letterSpacing:"2px",textTransform:"uppercase",color:"#c8d622",margin:"0 0 12px"},
-  matchCard:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"#111",border:"1px solid #1e1c1a"},
-  btnPrimary:{padding:"10px 24px",border:"1px solid #c8d622",background:"none",color:"#c8d622",fontSize:10,letterSpacing:"2px",textTransform:"uppercase",cursor:"pointer"},
-  btnSecondary:{padding:"8px 18px",border:"1px solid #2a2520",background:"none",color:"#7a7068",fontSize:10,letterSpacing:"1px",cursor:"pointer"},
-  overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"},
-  modal:{background:"#0f0d0c",border:"1px solid #2a2520",padding:"2rem",width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",position:"relative"},
-  closeBtn:{position:"absolute",top:16,right:16,background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#7a7068"},
-  modalTitle:{fontSize:16,fontWeight:500,margin:"0 0 20px",color:"#f5f0eb"},
-  formGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14},
-  label:{fontSize:10,letterSpacing:"1px",textTransform:"uppercase",color:"#7a7068",display:"block",marginBottom:6},
-  input:{width:"100%",padding:"9px 12px",background:"#1a1714",border:"1px solid #2a2520",color:"#f5f0eb",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
-  errorText:{fontSize:12,color:"#f87171",marginTop:8},
-  docWrap:{maxWidth:700},
-  docDesc:{fontSize:12,color:"#7a7068",marginBottom:32,letterSpacing:"0.5px"},
-  docTabs:{display:"flex",gap:8,marginBottom:40,flexWrap:"wrap"},
-  docTabBtn:{padding:"10px 20px",border:"1px solid #2a2520",background:"none",color:"#7a7068",fontSize:10,letterSpacing:"1px",textTransform:"uppercase",cursor:"pointer"},
-  docTabActive:{border:"1px solid #c8d622",color:"#c8d622"},
-  docSection:{marginBottom:32,paddingBottom:32,borderBottom:"1px solid #1e1c1a"},
-  docSectionLabel:{fontSize:9,letterSpacing:"2px",textTransform:"uppercase",color:"#7a7068",marginBottom:16},
-  docGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20},
-  docSelect:{width:"100%",padding:"12px 16px",background:"#1a1714",border:"1px solid #2a2520",color:"#f5f0eb",fontSize:13,outline:"none",cursor:"pointer"},
-};
+  useEffect(()=>{
+    fetch('/api/creatives').then(r=>r.json()).then(data=>{
+      setCreatives(Array.isArray(data)?data:[]);
+      setLoadingCreatives(false);
+    }).catch(()=>setLoadingCreatives(false));
+  },[]);
+
+  const filtered = creatives.filter(c=>{
+    const matchCat = cat==='all'||c.ruolo===cat;
+    const tags = typeof c.tags==='string'?c.tags:'';
+    const matchSearch = !search||
+      c.nome?.toLowerCase().includes(search.toLowerCase())||
+      c.ruolo?.toLowerCase().includes(search.toLowerCase())||
+      c.citta?.toLowerCase().includes(search.toLowerCase())||
+      tags.toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchSearch;
+  });
+
+  function navTo(p){setPage(p);setCat('all');setSearch('');setMobileMenuOpen(false);window.scrollTo(0,0);}
+  const isSeekerPage = page==='seekers';
+
+  function EmptyState({onJoin}) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-title">the[creatives] — coming soon</div>
+        <div className="empty-state-sub">Il network è in fase di selezione curatoriale. I profili approvati appariranno qui a breve.</div>
+        <button className="btn-bracket" onClick={onJoin}>Vuoi far parte del network? →</button>
+      </div>
+    );
+  }
+
+  function CreativeGrid({items}) {
+    if(items.length===0) return <EmptyState onJoin={()=>setShowCommunity(true)}/>;
+    const palettes = ['#1a1714','#2c1810','#0e1a1c','#1c0e10','#1a1a14','#2a1a14'];
+    const accents = ['#c8d622','#e8c49e','#9db3be','#d4426a','#c8d622','#e8c49e'];
+    return (
+      <div className="creative-grid">
+        {items.map((c,i)=>{
+          const bg=palettes[i%palettes.length];
+          const ac=accents[i%accents.length];
+          const avCls=c.availability==='available'?'av-yes':c.availability==='partial'?'av-partial':'av-no';
+          const avLabel=c.availability==='available'?'Disponibile':c.availability==='partial'?'Parziale':'Occupato';
+          const tags=typeof c.tags==='string'?c.tags.split(',').map(t=>t.trim()).filter(Boolean):[];
+          return (
+            <div key={c.id} className="c-card" onClick={()=>setSelected(c)}>
+              <div className="c-img" style={{background:c.foto_url?'transparent':bg}}>
+                <div className="c-img-inner" style={{color:ac+'66',backgroundImage:c.foto_url?`url(${c.foto_url})`:'none',backgroundSize:'cover',backgroundPosition:'center'}}>
+                  {!c.foto_url&&(c.ruolo||'').toUpperCase()}
+                </div>
+                <div className="c-overlay"><span className="c-overlay-text">Vedi profilo →</span></div>
+                <span className={`c-avail ${avCls}`}>{avLabel}</span>
+              </div>
+              <div className="c-body">
+                <div className="c-cat">{c.ruolo}</div>
+                <div className="c-name">{c.nome}</div>
+                <div className="c-city">{c.citta}</div>
+                <div className="c-tags">{tags.slice(0,3).map(t=><span key={t} className="c-tag">{t}</span>)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  useEffect(()=>{
+    document.title = 'the[name] — Network di Creativi & Production Agency';
+    let desc = document.querySelector('meta[name="description"]');
+    if(!desc){desc=document.createElement('meta');desc.name='description';document.head.appendChild(desc);}
+    desc.content = 'the[name] è un network selezionato di creativi e una production agency indipendente.';
+  },[]);
+
+  if(showAdmin) {
+    if(!adminAuth) return (<><style>{G}</style><AdminGate onSuccess={()=>setAdminAuth(true)}/></>);
+    return (<><style>{G}</style><AdminPanel onExit={()=>{setShowAdmin(false);setAdminAuth(false);}}/></>);
+  }
+
+  return (
+    <>
+      <style>{G}</style>
+      <div className={`mobile-menu${mobileMenuOpen?' open':''}`}>
+        <button className="mobile-menu-close" onClick={()=>setMobileMenuOpen(false)}>✕</button>
+        <button className="mobile-menu-btn" onClick={()=>navTo('home')}>home</button>
+        <button className="mobile-menu-btn" onClick={()=>navTo('creatives')}>the[creatives]</button>
+        <button className="mobile-menu-btn" onClick={()=>{setShowSeekerForm(true);setMobileMenuOpen(false);}}>the[seekers]</button>
+        <button className="mobile-menu-btn" onClick={()=>navTo('availability')}>{lang==='it'?'disponibilità':'availability'}</button>
+        <button className="mobile-menu-btn" onClick={()=>{window.location.href='/admin';setMobileMenuOpen(false);}}>Admin</button>
+        <button onClick={()=>setLang(l=>l==='it'?'en':'it')} style={{background:'none',border:'1px solid rgba(245,240,235,.3)',cursor:'pointer',fontSize:11,letterSpacing:2,fontFamily:"'Archivo Narrow',sans-serif",fontWeight:500,color:'var(--off)',padding:'8px 20px',marginTop:8}}>{lang==='it'?'EN':'IT'}</button>
+      </div>
+      <nav>
+        <div className="nav-logo" onClick={()=>navTo('home')}>the[<em>name</em>]</div>
+        <div className="nav-links">
+          {[['home','home'],['creatives','the[creatives]'],['seekers','the[seekers]'],['availability',lang==='it'?'disponibilita':'availability']].map(([key,label])=>(
+            <button key={key} className={`nav-btn${page===key?' active':''}`}
+              onClick={()=>key==='seekers'?setShowSeekerForm(true):navTo(key)}>{label}</button>
+          ))}
+          <button onClick={()=>setLang(l=>l==='it'?'en':'it')} style={{background:'none',border:'1px solid currentColor',cursor:'pointer',fontSize:9,letterSpacing:2,fontFamily:"'Archivo Narrow',sans-serif",fontWeight:500,color:'inherit',padding:'4px 10px',opacity:.5,transition:'opacity .2s'}}>{lang==='it'?'EN':'IT'}</button>
+          <button className="nav-btn nav-admin" onClick={()=>window.location.href='/admin'}>Admin</button>
+        </div>
+        <button className="hamburger" onClick={()=>setMobileMenuOpen(true)} aria-label="Menu"><span/><span/><span/></button>
+      </nav>
+
+      {page==='home' && (
+        <>
+          <div className="hero">
+            <div className="hero-noise"/>
+            <div className="hero-label">Network · Production Agency</div>
+            <h1 className="hero-headline">Unfold<br/>the unseen.<br/>Find the[<em>name</em>].<br/>Be the[<em>name</em>].</h1>
+            <div className="hero-bottom">
+              <p className="hero-desc">
+                {lang==='it'?"the[name] è un network selezionato di creativi e una production agency indipendente.":"the[name] is a curated network of creatives and an independent production agency."}
+                <br/><strong>the[creatives]</strong> · <strong>the[seekers]</strong>
+              </p>
+              <div className="hero-ctas">
+                <button className="btn-bracket" onClick={()=>navTo('creatives')}>the[creatives] →</button>
+                <button className="btn-bracket" onClick={()=>setShowSeekerForm(true)}>the[seekers] →</button>
+              </div>
+              <div className="hero-scroll">Scroll</div>
+            </div>
+          </div>
+          <div className="seeker-banner">
+            <div className="seeker-banner-title">{lang==='it'?"sei un":"are you a"}<br/><em>{lang==='it'?"seeker?":"seeker?"}</em></div>
+            <div className="seeker-banner-right">
+              <p className="seeker-banner-sub">{lang==='it'?"Hai un progetto in mente e stai cercando il creativo giusto? Scrivici direttamente.":"Have a project in mind and looking for the right creative? Contact us directly."}</p>
+              <button className="btn-seeker" onClick={()=>setShowSeekerForm(true)} style={{border:'none',cursor:'pointer'}}>{lang==='it'?'Cerca il talento →':'Find the talent →'}</button>
+            </div>
+          </div>
+          <div className="comm-strip">
+            <div className="comm-tag-label">the[community]</div>
+            <div className="comm-big-title">{lang==='it'?"Sei un":"Are you a"}<br/><em>{lang==='it'?"creativo?":"creative?"}</em><br/>{lang==='it'?"Entra nel":"Join the"}<br/>{lang==='it'?"network.":"network."}</div>
+            <p className="comm-body-text">{lang==='it'?"the[name] seleziona ":"the[name] selects "}<strong>{lang==='it'?"talenti emergenti e professionisti affermati":"emerging talents and established professionals"}</strong>{lang==='it'?" del mondo moda, comunicazione e cultura visiva.":" from fashion, communication and visual culture."}</p>
+            <div>
+              <button className="btn-comm" onClick={()=>setShowCommunity(true)}>{lang==='it'?'Compila il Talent Form →':'Fill in the Talent Form →'}</button>
+              <div className="comm-note">{lang==='it'?"Selezione curatoriale · Risposta entro 7 giorni":"Curatorial selection · Response within 7 days"}</div>
+            </div>
+            <div className="comm-stats">
+              <div><div className="comm-stat-n">50+</div><div className="comm-stat-l">{lang==='it'?"figure creative":"creatives"}</div></div>
+              <div><div className="comm-stat-n">10</div><div className="comm-stat-l">{lang==='it'?"città italiane":"italian cities"}</div></div>
+              <div><div className="comm-stat-n">100%</div><div className="comm-stat-l">{lang==='it'?"selezionati":"curated"}</div></div>
+            </div>
+          </div>
+          <div className="services" style={{background:'#fff'}}>
+            <div className="section-title" style={{color:'var(--ink)'}}>{lang==='it'?"chi siamo?":"who we are?"}<br/><em style={{color:'var(--terra)'}}>{lang==='it'?"Persone che credono nel potenziale.":"People who believe in potential."}</em><br/>{lang==='it'?"E lo attivano.":"And activate it."}</div>
+            <div className="services-grid">
+              {[
+                {num:'01',name:lang==='it'?'Scouting professionale':'Professional Scouting',desc:lang==='it'?'Non siamo un database. Siamo una piattaforma curatoriale.':'We are not a database. We are a curatorial platform.',tag:'Curated'},
+                {num:'02',name:lang==='it'?'Produzione end-to-end':'End-to-end Production',desc:lang==='it'?'Gestione completa dei progetti dal concept al delivery.':'Complete project management from concept to delivery.',tag:'Full Service'},
+                {num:'03',name:lang==='it'?'Piattaforma digitale':'Digital Platform',desc:lang==='it'?'Portfolio Builder, Smart Search, Matchmaking.':'Portfolio Builder, Smart Search, Matchmaking.',tag:'Aspirational'},
+                {num:'04',name:lang==='it'?'Media brand':'Media Brand',desc:lang==='it'?'Li raccontiamo. Newsletter, case study, trend report.':'We tell their stories. Newsletter, case studies, trend reports.',tag:'Aspirational'},
+              ].map(s=>(
+                <div key={s.num} className="service-item">
+                  <div className="service-num">{s.num}</div>
+                  <div className="service-name">{s.name}</div>
+                  <div className="service-desc">{s.desc}</div>
+                  <div className="service-tag">{s.tag}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <footer>
+            <div><div className="footer-logo">the[<em>name</em>]</div><div className="footer-tagline">{lang==='it'?"questo è solo l'inizio.":"this is just the beginning."}</div></div>
+            <div className="footer-contact">
+              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+              <div style={{display:'flex',gap:20,marginTop:20}}>
+                <a href={INSTAGRAM_URL} target="_blank" rel="noopener" style={{color:'var(--off)',textDecoration:'none',fontFamily:"'Archivo Narrow',sans-serif",fontSize:10,letterSpacing:2,textTransform:'uppercase',opacity:.5}}>Instagram ↗</a>
+                <a href="https://www.linkedin.com/company/findthename" target="_blank" rel="noopener" style={{color:'var(--off)',textDecoration:'none',fontFamily:"'Archivo Narrow',sans-serif",fontSize:10,letterSpacing:2,textTransform:'uppercase',opacity:.5}}>LinkedIn ↗</a>
+              </div>
+            </div>
+            <div className="footer-copy">
+              {lang==='it'?'© 2026 the[name] · Network selezionato di creativi · Production agency indipendente':'© 2026 the[name] · Curated network of creatives · Independent production agency'}
+              {' '}·{' '}
+              <button onClick={()=>setShowPrivacy(true)} style={{background:'none',border:'none',cursor:'pointer',color:'inherit',fontSize:'inherit',opacity:.6,textDecoration:'underline',padding:0,fontFamily:'inherit',letterSpacing:'inherit'}}>Privacy Policy</button>
+              {' '}·{' '}
+              <button onClick={()=>setShowTerms(true)} style={{background:'none',border:'none',cursor:'pointer',color:'inherit',fontSize:'inherit',opacity:.6,textDecoration:'underline',padding:0,fontFamily:'inherit',letterSpacing:'inherit'}}>Termini di Servizio</button>
+            </div>
+          </footer>
+        </>
+      )}
+
+      {page==='creatives' && (
+        <div style={{paddingTop:80}}>
+          <div className="section">
+            <div className="section-header">
+              <div className="section-title">the[<em>creatives</em>]</div>
+              <div className="section-count">{filtered.length} profili selezionati</div>
+            </div>
+            <div className="cat-tabs">
+              {CATEGORIES.map(c=><button key={c.key} className={`cat-tab${cat===c.key?' active':''}`} onClick={()=>setCat(c.key)}>{c.label}</button>)}
+            </div>
+            {loadingCreatives?<div className="loading">Caricamento profili...</div>:<CreativeGrid items={filtered}/>}
+          </div>
+        </div>
+      )}
+
+      {page==='seekers' && (
+        <div style={{paddingTop:80}}>
+          <div className="seekers-hero">
+            <div className="seekers-title">trova<br/><em>il creativo</em><br/>giusto.</div>
+            <p className="seekers-sub">Non è una gallery. Ogni profilo in the[name] è selezionato per linguaggio, coerenza e potenziale.</p>
+          </div>
+          <div className="section">
+            <div className="search-wrap">
+              <span className="search-icon">↳</span>
+              <input className="search-input" placeholder="Cerca per ruolo, skill, citta..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            </div>
+            <div className="cat-tabs">
+              {CATEGORIES.map(c=><button key={c.key} className={`cat-tab${cat===c.key?' active':''}`} onClick={()=>setCat(c.key)}>{c.label}</button>)}
+            </div>
+            {loadingCreatives?<div className="loading">Caricamento profili...</div>:<CreativeGrid items={filtered}/>}
+            <div style={{marginTop:60,padding:'60px 0',borderTop:'1px solid rgba(13,11,10,.1)',textAlign:'center'}}>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:36,fontWeight:300,fontStyle:'italic',marginBottom:12}}>Non trovi quello che cerchi?</div>
+              <div style={{fontSize:14,color:'var(--mid)',marginBottom:28,fontWeight:300}}>Scrivici direttamente — curiamo ogni ricerca su misura.</div>
+              <a href={`mailto:${CONTACT_EMAIL}`} style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontStyle:'italic',color:'var(--ink)',borderBottom:'1px solid var(--ink)',paddingBottom:4,textDecoration:'none'}}>{CONTACT_EMAIL}</a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {page==='availability' && (
+        <div style={{paddingTop:80}}>
+          <div className="section">
+            <div className="section-header">
+              <div className="section-title">disponibilita<br/><em>corrente</em></div>
+              <div className="section-count">{creatives.length} creativi</div>
+            </div>
+            <div className="avail-grid">
+              {creatives.map(c=>{
+                const avCls=c.availability==='available'?'av-yes':c.availability==='partial'?'av-partial':'av-no';
+                const avLabel=c.availability==='available'?'Disponibile':c.availability==='partial'?'Parziale':'Occupato';
+                return (
+                  <div key={c.id} className="avail-card" onClick={()=>setSelected(c)}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+                      <div><div className="avail-name">{c.nome}</div><div className="avail-role">{c.ruolo} · {c.citta}</div></div>
+                      <span className={`c-avail ${avCls}`} style={{position:'static'}}>{avLabel}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selected&&<CreativeModal c={selected} onClose={()=>setSelected(null)} onCommunity={()=>setShowCommunity(true)} isSeekerPage={isSeekerPage}/>}
+      {showCommunity&&<CommunityForm onClose={()=>setShowCommunity(false)}/>}
+      {showPrivacy&&<PrivacyPolicy onClose={()=>setShowPrivacy(false)}/>}
+      {showTerms&&<TermsOfService onClose={()=>setShowTerms(false)}/>}
+      {showSeekerForm&&<SeekerForm onClose={()=>setShowSeekerForm(false)}/>}
+      {toast&&<div className="toast">{toast}</div>}
+
+      {!cookieAccepted&&(
+        <div className="cookie-banner">
+          <div className="cookie-text">
+            Questo sito utilizza cookie tecnici necessari al funzionamento. Raccogliamo dati personali tramite il Talent Form nel rispetto del GDPR UE 2016/679.{' '}
+            <button onClick={()=>setShowPrivacy(true)} style={{background:'none',border:'none',color:'var(--lime)',cursor:'pointer',fontSize:12,textDecoration:'underline',padding:0}}>Privacy Policy</button>
+            {' '}·{' '}
+            <button onClick={()=>setShowTerms(true)} style={{background:'none',border:'none',color:'var(--lime)',cursor:'pointer',fontSize:12,textDecoration:'underline',padding:0}}>Termini di Servizio</button>
+          </div>
+          <button className="cookie-btn" onClick={()=>setCookieAccepted(true)}>Accetto</button>
+        </div>
+      )}
+    </>
+  );
+}
