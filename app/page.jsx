@@ -1218,7 +1218,7 @@ export default function App() {
         <button className="mobile-menu-btn" onClick={()=>navTo('creatives')}>the[creatives]</button>
         <button className="mobile-menu-btn" onClick={()=>{setShowSeekerForm(true);setMobileMenuOpen(false);}}>the[seekers]</button>
         <button className="mobile-menu-btn" onClick={()=>navTo('availability')}>{lang==='it'?'disponibilità':'availability'}</button>
-        <button className="mobile-menu-btn" onClick={()=>{setShowAdmin(true);setMobileMenuOpen(false);}}>Admin</button>
+        <button className="mobile-menu-btn" onClick={()=>{window.location.href='/admin';setMobileMenuOpen(false);}}>Admin</button>
         <button onClick={()=>setLang(l=>l==='it'?'en':'it')} style={{background:'none',border:'1px solid rgba(245,240,235,.3)',cursor:'pointer',fontSize:11,letterSpacing:2,fontFamily:"'Archivo Narrow',sans-serif",fontWeight:500,color:'var(--off)',padding:'8px 20px',marginTop:8}}>{lang==='it'?'EN':'IT'}</button>
       </div>
       <nav>
@@ -1229,7 +1229,7 @@ export default function App() {
               onClick={()=>key==='seekers'?setShowSeekerForm(true):navTo(key)}>{label}</button>
           ))}
           <button onClick={()=>setLang(l=>l==='it'?'en':'it')} style={{background:'none',border:'1px solid currentColor',cursor:'pointer',fontSize:9,letterSpacing:2,fontFamily:"'Archivo Narrow',sans-serif",fontWeight:500,color:'inherit',padding:'4px 10px',opacity:.5,transition:'opacity .2s'}}>{lang==='it'?'EN':'IT'}</button>
-          <button className="nav-btn nav-admin" onClick={()=>setShowAdmin(true)}>Admin</button>
+          <button className="nav-btn nav-admin" onClick={()=>window.location.href='/admin'}>Admin</button>
         </div>
         <button className="hamburger" onClick={()=>setMobileMenuOpen(true)} aria-label="Menu"><span/><span/><span/></button>
       </nav>
