@@ -504,14 +504,9 @@ function DocumentiTab() {
 
 // ── Booking Confirmation form ────────────────────────────────────
 function BookingConfirmation({ creatives }) {
-  const [today, setToday] = useState("");
-  const [docNum, setDocNum] = useState("");
-
-  useEffect(() => {
-    const now = new Date();
-    setToday(now.toISOString().split("T")[0]);
-    setDocNum(`BC-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-  }, []);
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  const docNumStr = `BC-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
 
   // Usiamo refs invece di state → nessun re-render mentre si scrive
   const refs = {
@@ -592,8 +587,8 @@ function BookingConfirmation({ creatives }) {
       <div style={d.docSection}>
         <p style={d.docSectionLabel}>INTESTAZIONE</p>
         <div style={d.docGrid}>
-          <div><label style={lbl}>N. DOCUMENTO</label><input ref={refs.docNumber} defaultValue={docNum} style={inp} /></div>
-          <div><label style={lbl}>DATA</label><input ref={refs.docDate} defaultValue={today} type="date" style={inp} /></div>
+          <div><label style={lbl}>N. DOCUMENTO</label><input ref={refs.docNumber} defaultValue={docNumStr} style={inp} /></div>
+          <div><label style={lbl}>DATA</label><input ref={refs.docDate} defaultValue={todayStr} type="date" style={inp} /></div>
         </div>
       </div>
 
@@ -793,8 +788,8 @@ function pdfField(label, value) { return `<div><div class="fl">${label}</div><di
 
 // ── 02 · Production Quotation ────────────────────────────────────
 function ProductionQuotation({ creatives }) {
-  const [today, setToday] = useState("");
-  useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 
   const rDocNum = useRef(null); const rDocDate = useRef(null);
   const rClientName = useRef(null); const rClientContact = useRef(null); const rClientEmail = useRef(null);
@@ -870,7 +865,7 @@ function ProductionQuotation({ creatives }) {
       <p style={d.docDesc}>Preventivo di produzione dettagliato per brand e clienti</p>
       <div style={sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={grid}>
         <div><label style={lbl}>N. PREVENTIVO</label><input ref={rDocNum} defaultValue="" placeholder="QT-2025-001" style={inp}/></div>
-        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={today} type="date" style={inp}/></div>
+        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={todayStr} type="date" style={inp}/></div>
       </div></div>
       <div style={sec}><p style={d.docSectionLabel}>CLIENTE E PROGETTO</p><div style={grid}>
         <div><label style={lbl}>CLIENTE / BRAND</label><input ref={rClientName} defaultValue="" placeholder="Brand S.r.l." style={inp}/></div>
@@ -916,8 +911,8 @@ function ProductionQuotation({ creatives }) {
 
 // ── 03 · NDA ─────────────────────────────────────────────────────
 function NDAForm({ creatives }) {
-  const [today, setToday] = useState("");
-  useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 
   const rDocNum = useRef(null); const rDocDate = useRef(null);
   const rParty1Name = useRef(null); const rParty1Email = useRef(null);
@@ -974,7 +969,7 @@ function NDAForm({ creatives }) {
       </div>
       <div style={sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={grid}>
         <div><label style={lbl}>N. DOCUMENTO</label><input ref={rDocNum} defaultValue="" placeholder="NDA-2025-001" style={inp}/></div>
-        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={today} type="date" style={inp}/></div>
+        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={todayStr} type="date" style={inp}/></div>
       </div></div>
       <div style={sec}><p style={d.docSectionLabel}>PARTE DIVULGANTE (chi condivide le info)</p><div style={grid}>
         <div><label style={lbl}>NOME / AZIENDA</label><input ref={rParty1Name} defaultValue="" placeholder="Brand S.r.l." style={inp}/></div>
@@ -1002,8 +997,8 @@ function NDAForm({ creatives }) {
 
 // ── 04 · Image Licensing ─────────────────────────────────────────
 function ImageLicensing({ creatives }) {
-  const [today, setToday] = useState("");
-  useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 
   const rDocNum = useRef(null); const rDocDate = useRef(null);
   const rTalentName = useRef(null); const rTalentEmail = useRef(null);
@@ -1070,7 +1065,7 @@ function ImageLicensing({ creatives }) {
       </div>
       <div style={sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={grid}>
         <div><label style={lbl}>N. LICENZA</label><input ref={rDocNum} defaultValue="" placeholder="LIC-2025-001" style={inp}/></div>
-        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={today} type="date" style={inp}/></div>
+        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={todayStr} type="date" style={inp}/></div>
       </div></div>
       <div style={sec}><p style={d.docSectionLabel}>LICENZIANTE (CREATIVO)</p><div style={grid}>
         <div><label style={lbl}>NOME</label><input ref={rTalentName} defaultValue="" placeholder="Nome Cognome" style={inp}/></div>
