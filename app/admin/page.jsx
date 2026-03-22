@@ -504,8 +504,14 @@ function DocumentiTab() {
 
 // ── Booking Confirmation form ────────────────────────────────────
 function BookingConfirmation({ creatives }) {
-  const today = new Date().toISOString().split("T")[0];
-  const docNum = `BC-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  const [today, setToday] = useState("");
+  const [docNum, setDocNum] = useState("");
+
+  useEffect(() => {
+    const now = new Date();
+    setToday(now.toISOString().split("T")[0]);
+    setDocNum(`BC-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+  }, []);
 
   // Usiamo refs invece di state → nessun re-render mentre si scrive
   const refs = {
@@ -787,20 +793,126 @@ function pdfField(label, value) { return `<div><div class="fl">${label}</div><di
 
 // ── 02 · Production Quotation ────────────────────────────────────
 function ProductionQuotation({ creatives }) {
-  const today = new Date().toISOString().split("T")[0];
-  const r = {
-    docNum: useRef(null), docDate: useRef(null),
-    clientName: useRef(null), clientContact: useRef(null), clientEmail: useRef(null),
-    projectName: useRef(null), projectDesc: useRef(null),
-    artDir: useRef(null), photo: useRef(null), video: useRef(null),
-    stylist: useRef(null), mua: useRef(null), models: useRef(null),
-    location: useRef(null), equipment: useRef(null), other: useRef(null),
-    totalProd: useRef(null), agencyPct: useRef(null), agencyFee: useRef(null),
-    totalNet: useRef(null), vat: useRef(null), totalGross: useRef(null),
-    usageRights: useRef(null), territory: useRef(null), duration: useRef(null),
-    notes: useRef(null),
+  const [today, setToday] = useState("");
+  useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
+
+  const rDocNum = useRef(null); const rDocDate = useRef(null);
+  const rClientName = useRef(null); const rClientContact = useRef(null); const rClientEmail = useRef(null);
+  const rProjectName = useRef(null); const rProjectDesc = useRef(null);
+  const rArtDir = useRef(null); const rPhoto = useRef(null); const rVideo = useRef(null);
+  const rStylist = useRef(null); const rMua = useRef(null); const rModels = useRef(null);
+  const rLocation = useRef(null); const rEquipment = useRef(null); const rOther = useRef(null);
+  const rTotalProd = useRef(null); const rAgencyPct = useRef(null); const rAgencyFee = useRef(null);
+  const rTotalNet = useRef(null); const rVat = useRef(null); const rTotalGross = useRef(null);
+  const rUsageRights = useRef(null); const rTerritory = useRef(null); const rDuration = useRef(null);
+  const rNotes = useRef(null);
+
+  const g = (ref) => ref?.current?.value || "";
+
+  const recalc = () => {
+    const items = [rArtDir, rPhoto, rVideo, rStylist, rMua, rModels, rLocation, rEquipment, rOther];
+    const total = items.reduce((s, ref) => s + (parseFloat(ref?.current?.value) || 0), 0);
+    const pct = parseFloat(rAgencyPct?.current?.value) || 20;
+    const agency = total * pct / 100;
+    const net = total + agency;
+    const vat = net * 0.22;
+    const gross = net + vat;
+    if (rTotalProd.current) rTotalProd.current.value = total.toFixed(2);
+    if (rAgencyFee.current) rAgencyFee.current.value = agency.toFixed(2);
+    if (rTotalNet.current) rTotalNet.current.value = net.toFixed(2);
+    if (rVat.current) rVat.current.value = vat.toFixed(2);
+    if (rTotalGross.current) rTotalGross.current.value = gross.toFixed(2);
   };
-  const v = (k) => r[k]?.current?.value || "";
+
+  const generatePDF = () => {
+    const html = pdfHeader("Production Quotation", g(rDocNum) || "QT-", fmtDate(g(rDocDate))) + `
+      <div class="sec"><div class="sec-label">Cliente e Progetto</div><div class="grid">
+        ${pdfField("Cliente", g(rClientName))}${pdfField("Referente", g(rClientContact))}
+        ${pdfField("Email", g(rClientEmail))}${pdfField("Progetto", g(rProjectName))}
+      </div></div>
+      ${g(rProjectDesc) ? `<div class="sec"><div class="sec-label">Brief</div><p style="font-size:14px;line-height:1.7">${g(rProjectDesc)}</p></div>` : ""}
+      <div class="sec"><div class="sec-label">Budget Voci (€ escluso IVA)</div><div class="grid">
+        ${pdfField("Direzione Artistica", "€ " + g(rArtDir))}${pdfField("Fotografo / Post", "€ " + g(rPhoto))}
+        ${pdfField("Video / Post", "€ " + g(rVideo))}${pdfField("Stylist", "€ " + g(rStylist))}
+        ${pdfField("Make-up & Hair", "€ " + g(rMua))}${pdfField("Modelli/e", "€ " + g(rModels))}
+        ${pdfField("Location", "€ " + g(rLocation))}${pdfField("Attrezzatura", "€ " + g(rEquipment))}
+        ${g(rOther) ? pdfField("Altro", "€ " + g(rOther)) : ""}
+      </div></div>
+      <div class="sec"><div class="sec-label">Riepilogo</div>
+        <div class="fee-box">
+          <div class="fee-row"><span>Totale produzione</span><span>€ ${g(rTotalProd)}</span></div>
+          <div class="fee-row"><span>Agency fee the[name] (${g(rAgencyPct) || 20}%)</span><span>€ ${g(rAgencyFee)}</span></div>
+          <div class="fee-row"><span>Totale imponibile</span><span>€ ${g(rTotalNet)}</span></div>
+          <div class="fee-row"><span>IVA 22%</span><span>€ ${g(rVat)}</span></div>
+          <div class="fee-row"><span>TOTALE IVA INCLUSA</span><span>€ ${g(rTotalGross)}</span></div>
+        </div>
+      </div>
+      <div class="sec"><div class="sec-label">Diritti di utilizzo</div><div class="grid">
+        ${pdfField("Utilizzi", g(rUsageRights))}${pdfField("Territorio", g(rTerritory))}${pdfField("Durata", g(rDuration))}
+      </div></div>
+      ${g(rNotes) ? `<div class="sec"><div class="sec-label">Note</div><p style="font-size:14px">${g(rNotes)}</p></div>` : ""}
+      <div class="sign-row">
+        <div><div class="fl">the[name]</div><div class="sign-line">Firma</div></div>
+        <div><div class="fl">${g(rClientName) || "Cliente"}</div><div class="sign-line">Firma</div></div>
+      </div>
+      <div class="footer">the[name] · info.findthename@gmail.com</div></body></html>`;
+    const win = window.open("", "_blank"); win.document.write(html); win.document.close(); setTimeout(() => win.print(), 500);
+  };
+
+  const inp = { width: "100%", padding: "10px 12px", background: "#1a1714", border: "1px solid #2a2520", color: "#f5f0eb", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", borderRadius: 2 };
+  const roInp = { ...inp, background: "#111", color: "#7a7068" };
+  const lbl = { fontSize: 9, letterSpacing: "1px", textTransform: "uppercase", color: "#7a7068", display: "block", marginBottom: 6 };
+  const sec = { marginBottom: 32, paddingBottom: 32, borderBottom: "1px solid #1e1c1a" };
+  const grid = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 };
+
+  return (
+    <div style={d.docWrap}>
+      <p style={d.docDesc}>Preventivo di produzione dettagliato per brand e clienti</p>
+      <div style={sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={grid}>
+        <div><label style={lbl}>N. PREVENTIVO</label><input ref={rDocNum} defaultValue="" placeholder="QT-2025-001" style={inp}/></div>
+        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={today} type="date" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>CLIENTE E PROGETTO</p><div style={grid}>
+        <div><label style={lbl}>CLIENTE / BRAND</label><input ref={rClientName} defaultValue="" placeholder="Brand S.r.l." style={inp}/></div>
+        <div><label style={lbl}>REFERENTE</label><input ref={rClientContact} defaultValue="" placeholder="Nome Cognome" style={inp}/></div>
+        <div style={{gridColumn:"span 2"}}><label style={lbl}>EMAIL</label><input ref={rClientEmail} defaultValue="" type="email" placeholder="email@brand.com" style={inp}/></div>
+        <div><label style={lbl}>NOME PROGETTO</label><input ref={rProjectName} defaultValue="" placeholder="Campagna SS26" style={inp}/></div>
+        <div style={{gridColumn:"span 2"}}><label style={lbl}>BRIEF / DESCRIZIONE</label><textarea ref={rProjectDesc} defaultValue="" rows={3} style={{...inp, resize:"vertical"}}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>VOCI DI BUDGET (€ escluso IVA)</p>
+        <p style={{fontSize:10,color:"#7a7068",marginBottom:16}}>Inserisci gli importi e clicca fuori dal campo — i totali si calcolano automaticamente.</p>
+        <div style={grid}>
+          <div><label style={lbl}>DIREZIONE ARTISTICA</label><input ref={rArtDir} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div><label style={lbl}>FOTOGRAFO + POST</label><input ref={rPhoto} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div><label style={lbl}>VIDEO + POST</label><input ref={rVideo} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div><label style={lbl}>STYLIST</label><input ref={rStylist} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div><label style={lbl}>MAKE-UP & HAIR</label><input ref={rMua} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div><label style={lbl}>MODELLI/E</label><input ref={rModels} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div><label style={lbl}>LOCATION</label><input ref={rLocation} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div><label style={lbl}>ATTREZZATURA</label><input ref={rEquipment} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+          <div style={{gridColumn:"span 2"}}><label style={lbl}>ALTRO</label><input ref={rOther} defaultValue="" placeholder="0" style={inp} onBlur={recalc}/></div>
+        </div>
+      </div>
+      <div style={sec}><p style={d.docSectionLabel}>RIEPILOGO (auto-calcolato)</p><div style={grid}>
+        <div><label style={lbl}>TOTALE PRODUZIONE (€)</label><input ref={rTotalProd} defaultValue="" style={roInp} readOnly/></div>
+        <div><label style={lbl}>% FEE THE[NAME]</label><input ref={rAgencyPct} defaultValue="20" style={inp} onBlur={recalc}/></div>
+        <div><label style={lbl}>FEE THE[NAME] (€)</label><input ref={rAgencyFee} defaultValue="" style={roInp} readOnly/></div>
+        <div><label style={lbl}>TOTALE IMPONIBILE (€)</label><input ref={rTotalNet} defaultValue="" style={roInp} readOnly/></div>
+        <div><label style={lbl}>IVA 22% (€)</label><input ref={rVat} defaultValue="" style={roInp} readOnly/></div>
+        <div><label style={lbl}>TOTALE IVA INCLUSA (€)</label><input ref={rTotalGross} defaultValue="" style={roInp} readOnly/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>DIRITTI DI UTILIZZO</p><div style={grid}>
+        <div style={{gridColumn:"span 2"}}><label style={lbl}>UTILIZZI CONCESSI</label><input ref={rUsageRights} defaultValue="" placeholder="Social, Web, Stampa" style={inp}/></div>
+        <div><label style={lbl}>TERRITORIO</label><input ref={rTerritory} defaultValue="" placeholder="Italia" style={inp}/></div>
+        <div><label style={lbl}>DURATA</label><input ref={rDuration} defaultValue="" placeholder="12 mesi" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>NOTE</p>
+        <textarea ref={rNotes} defaultValue="" rows={3} style={{...inp, width:"100%", resize:"vertical"}} placeholder="Note aggiuntive..."/>
+      </div>
+      <button onClick={generatePDF} style={{...d.btnPrimary, marginTop:8}}>↓ GENERA E STAMPA PDF</button>
+    </div>
+  );
+}
 
   const recalc = () => {
     const items = [r.artDir, r.photo, r.video, r.stylist, r.mua, r.models, r.location, r.equipment, r.other];
@@ -909,15 +1021,199 @@ function ProductionQuotation({ creatives }) {
 
 // ── 03 · NDA ─────────────────────────────────────────────────────
 function NDAForm({ creatives }) {
-  const today = new Date().toISOString().split("T")[0];
-  const r = {
-    docNum: useRef(null), docDate: useRef(null),
-    party1Name: useRef(null), party1Email: useRef(null),
-    party2Name: useRef(null), party2Email: useRef(null),
-    projectName: useRef(null), projectDesc: useRef(null),
-    duration: useRef(null), jurisdiction: useRef(null), notes: useRef(null),
+  const [today, setToday] = useState("");
+  useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
+
+  const rDocNum = useRef(null); const rDocDate = useRef(null);
+  const rParty1Name = useRef(null); const rParty1Email = useRef(null);
+  const rParty2Name = useRef(null); const rParty2Email = useRef(null);
+  const rProjectName = useRef(null); const rProjectDesc = useRef(null);
+  const rDuration = useRef(null); const rJurisdiction = useRef(null); const rNotes = useRef(null);
+
+  const g = (ref) => ref?.current?.value || "";
+
+  const handleCreativeSelect = (id) => {
+    if (!id) return;
+    const c = creatives.find((x) => x.id === id);
+    if (c && rParty2Name.current) rParty2Name.current.value = c.nome || "";
   };
-  const v = (k) => r[k]?.current?.value || "";
+
+  const generatePDF = () => {
+    const html = pdfHeader("Accordo di Riservatezza — NDA", g(rDocNum) || "NDA-", fmtDate(g(rDocDate))) + `
+      <div class="sec"><div class="sec-label">Parti</div><div class="grid">
+        ${pdfField("Parte Divulgante", g(rParty1Name))}${pdfField("Email", g(rParty1Email))}
+        ${pdfField("Parte Ricevente", g(rParty2Name))}${pdfField("Email", g(rParty2Email))}
+      </div></div>
+      <div class="sec"><div class="sec-label">Progetto</div><div class="grid">
+        ${pdfField("Nome progetto", g(rProjectName))}
+        ${g(rProjectDesc) ? `<div style="grid-column:span 2">${pdfField("Descrizione", g(rProjectDesc))}</div>` : ""}
+      </div></div>
+      <div class="sec"><div class="sec-label">Condizioni</div>
+        <p style="font-size:14px;line-height:1.8;color:#333;">Le parti si impegnano a mantenere riservate tutte le informazioni condivise nell'ambito della collaborazione descritta, per una durata di <strong>${g(rDuration) || "2"} anni</strong> dalla firma del presente accordo.</p>
+      </div>
+      <div class="grid" style="margin-bottom:28px">
+        ${pdfField("Durata riservatezza", g(rDuration) + " anni")}${pdfField("Foro competente", g(rJurisdiction) || "Firenze")}
+      </div>
+      ${g(rNotes) ? `<div class="sec"><div class="sec-label">Note</div><p style="font-size:14px">${g(rNotes)}</p></div>` : ""}
+      <div class="sign-row">
+        <div><div class="fl">${g(rParty1Name) || "Parte Divulgante"}</div><div class="sign-line">Firma e data</div></div>
+        <div><div class="fl">${g(rParty2Name) || "Parte Ricevente"}</div><div class="sign-line">Firma e data</div></div>
+      </div>
+      <div class="footer">the[name] · info.findthename@gmail.com</div></body></html>`;
+    const win = window.open("", "_blank"); win.document.write(html); win.document.close(); setTimeout(() => win.print(), 500);
+  };
+
+  const inp = { width: "100%", padding: "10px 12px", background: "#1a1714", border: "1px solid #2a2520", color: "#f5f0eb", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", borderRadius: 2 };
+  const lbl = { fontSize: 9, letterSpacing: "1px", textTransform: "uppercase", color: "#7a7068", display: "block", marginBottom: 6 };
+  const sec = { marginBottom: 32, paddingBottom: 32, borderBottom: "1px solid #1e1c1a" };
+  const grid = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 };
+
+  return (
+    <div style={d.docWrap}>
+      <p style={d.docDesc}>Accordo di riservatezza per brief, strategie e materiali inediti</p>
+      <div style={sec}><p style={d.docSectionLabel}>AUTO-COMPILA DA CREATIVO NEL NETWORK</p>
+        <select onChange={(e) => handleCreativeSelect(e.target.value)} style={d.docSelect} defaultValue="">
+          <option value="">-- Seleziona creativo (parte ricevente) --</option>
+          {creatives.map((c) => <option key={c.id} value={c.id}>{c.nome} · {c.ruolo}</option>)}
+        </select>
+      </div>
+      <div style={sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={grid}>
+        <div><label style={lbl}>N. DOCUMENTO</label><input ref={rDocNum} defaultValue="" placeholder="NDA-2025-001" style={inp}/></div>
+        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={today} type="date" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>PARTE DIVULGANTE (chi condivide le info)</p><div style={grid}>
+        <div><label style={lbl}>NOME / AZIENDA</label><input ref={rParty1Name} defaultValue="" placeholder="Brand S.r.l." style={inp}/></div>
+        <div><label style={lbl}>EMAIL</label><input ref={rParty1Email} defaultValue="" type="email" placeholder="email@brand.com" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>PARTE RICEVENTE (creativo)</p><div style={grid}>
+        <div><label style={lbl}>NOME</label><input ref={rParty2Name} defaultValue="" placeholder="Nome Cognome" style={inp}/></div>
+        <div><label style={lbl}>EMAIL</label><input ref={rParty2Email} defaultValue="" type="email" placeholder="email@studio.com" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>PROGETTO</p><div style={grid}>
+        <div style={{gridColumn:"span 2"}}><label style={lbl}>NOME PROGETTO</label><input ref={rProjectName} defaultValue="" placeholder="Campagna SS26" style={inp}/></div>
+        <div style={{gridColumn:"span 2"}}><label style={lbl}>DESCRIZIONE COLLABORAZIONE</label><textarea ref={rProjectDesc} defaultValue="" rows={3} style={{...inp, resize:"vertical"}}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>CONDIZIONI</p><div style={grid}>
+        <div><label style={lbl}>DURATA RISERVATEZZA (anni)</label><input ref={rDuration} defaultValue="2" style={inp}/></div>
+        <div><label style={lbl}>FORO COMPETENTE</label><input ref={rJurisdiction} defaultValue="Firenze" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>NOTE</p>
+        <textarea ref={rNotes} defaultValue="" rows={3} style={{...inp, width:"100%", resize:"vertical"}} placeholder="Note aggiuntive..."/>
+      </div>
+      <button onClick={generatePDF} style={{...d.btnPrimary, marginTop:8}}>↓ GENERA E STAMPA PDF</button>
+    </div>
+  );
+}
+
+// ── 04 · Image Licensing ─────────────────────────────────────────
+function ImageLicensing({ creatives }) {
+  const [today, setToday] = useState("");
+  useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
+
+  const rDocNum = useRef(null); const rDocDate = useRef(null);
+  const rTalentName = useRef(null); const rTalentEmail = useRef(null);
+  const rClientName = useRef(null); const rClientEmail = useRef(null);
+  const rProjectName = useRef(null); const rContentDesc = useRef(null);
+  const rShootDate = useRef(null); const rFileCount = useRef(null); const rFileFormats = useRef(null);
+  const rUsageMedia = useRef(null); const rTerritory = useRef(null); const rDuration = useRef(null);
+  const rExclusivity = useRef(null); const rLicenseFee = useRef(null); const rPaymentDue = useRef(null);
+  const rJurisdiction = useRef(null); const rNotes = useRef(null);
+
+  const g = (ref) => ref?.current?.value || "";
+
+  const handleCreativeSelect = (id) => {
+    if (!id) return;
+    const c = creatives.find((x) => x.id === id);
+    if (c && rTalentName.current) rTalentName.current.value = c.nome || "";
+  };
+
+  const generatePDF = () => {
+    const html = pdfHeader("Image Licensing Agreement", g(rDocNum) || "LIC-", fmtDate(g(rDocDate))) + `
+      <div class="sec"><div class="sec-label">Parti</div><div class="grid">
+        ${pdfField("Licenziante (Creativo)", g(rTalentName))}${pdfField("Email creativo", g(rTalentEmail))}
+        ${pdfField("Licenziatario (Cliente)", g(rClientName))}${pdfField("Email cliente", g(rClientEmail))}
+      </div></div>
+      <div class="sec"><div class="sec-label">Materiale Licenziato</div><div class="grid">
+        ${pdfField("Progetto", g(rProjectName))}${pdfField("Data produzione", fmtDate(g(rShootDate)))}
+        <div style="grid-column:span 2">${pdfField("Descrizione contenuto", g(rContentDesc))}</div>
+        ${pdfField("N. file", g(rFileCount))}${pdfField("Formati", g(rFileFormats))}
+      </div></div>
+      <div class="sec"><div class="sec-label">Termini di Utilizzo</div><div class="grid">
+        <div style="grid-column:span 2">${pdfField("Media / Canali", g(rUsageMedia))}</div>
+        ${pdfField("Territorio", g(rTerritory))}${pdfField("Durata", g(rDuration))}
+        ${pdfField("Esclusiva", g(rExclusivity) || "No")}
+      </div></div>
+      <div class="sec"><div class="sec-label">Corrispettivo</div>
+        <div class="fee-box">
+          <div class="fee-row"><span>Fee licenza</span><span>€ ${g(rLicenseFee) || "—"}</span></div>
+          <div class="fee-row"><span>Scadenza pagamento</span><span>${fmtDate(g(rPaymentDue))}</span></div>
+        </div>
+      </div>
+      <div class="grid" style="margin-bottom:28px">${pdfField("Foro competente", g(rJurisdiction) || "Firenze")}</div>
+      ${g(rNotes) ? `<div class="sec"><div class="sec-label">Note</div><p style="font-size:14px">${g(rNotes)}</p></div>` : ""}
+      <div class="sign-row">
+        <div><div class="fl">${g(rTalentName) || "Creativo"}</div><div class="sign-line">Firma e data</div></div>
+        <div><div class="fl">${g(rClientName) || "Cliente"}</div><div class="sign-line">Firma e data</div></div>
+      </div>
+      <div class="footer">the[name] · info.findthename@gmail.com</div></body></html>`;
+    const win = window.open("", "_blank"); win.document.write(html); win.document.close(); setTimeout(() => win.print(), 500);
+  };
+
+  const inp = { width: "100%", padding: "10px 12px", background: "#1a1714", border: "1px solid #2a2520", color: "#f5f0eb", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", borderRadius: 2 };
+  const lbl = { fontSize: 9, letterSpacing: "1px", textTransform: "uppercase", color: "#7a7068", display: "block", marginBottom: 6 };
+  const sec = { marginBottom: 32, paddingBottom: 32, borderBottom: "1px solid #1e1c1a" };
+  const grid = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 };
+
+  return (
+    <div style={d.docWrap}>
+      <p style={d.docDesc}>Licenza di utilizzo immagini e contenuti prodotti dai creativi</p>
+      <div style={sec}><p style={d.docSectionLabel}>AUTO-COMPILA DA CREATIVO NEL NETWORK</p>
+        <select onChange={(e) => handleCreativeSelect(e.target.value)} style={d.docSelect} defaultValue="">
+          <option value="">-- Seleziona creativo (licenziante) --</option>
+          {creatives.map((c) => <option key={c.id} value={c.id}>{c.nome} · {c.ruolo}</option>)}
+        </select>
+      </div>
+      <div style={sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={grid}>
+        <div><label style={lbl}>N. LICENZA</label><input ref={rDocNum} defaultValue="" placeholder="LIC-2025-001" style={inp}/></div>
+        <div><label style={lbl}>DATA</label><input ref={rDocDate} defaultValue={today} type="date" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>LICENZIANTE (CREATIVO)</p><div style={grid}>
+        <div><label style={lbl}>NOME</label><input ref={rTalentName} defaultValue="" placeholder="Nome Cognome" style={inp}/></div>
+        <div><label style={lbl}>EMAIL</label><input ref={rTalentEmail} defaultValue="" type="email" placeholder="email@creativo.com" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>LICENZIATARIO (CLIENTE)</p><div style={grid}>
+        <div><label style={lbl}>NOME / AZIENDA</label><input ref={rClientName} defaultValue="" placeholder="Brand S.r.l." style={inp}/></div>
+        <div><label style={lbl}>EMAIL</label><input ref={rClientEmail} defaultValue="" type="email" placeholder="email@brand.com" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>MATERIALE LICENZIATO</p><div style={grid}>
+        <div><label style={lbl}>NOME PROGETTO</label><input ref={rProjectName} defaultValue="" placeholder="Campagna SS26" style={inp}/></div>
+        <div><label style={lbl}>DATA PRODUZIONE</label><input ref={rShootDate} defaultValue="" type="date" style={inp}/></div>
+        <div style={{gridColumn:"span 2"}}><label style={lbl}>DESCRIZIONE CONTENUTO</label><textarea ref={rContentDesc} defaultValue="" rows={3} style={{...inp, resize:"vertical"}}/></div>
+        <div><label style={lbl}>NUMERO FILE</label><input ref={rFileCount} defaultValue="" placeholder="Es. 30" style={inp}/></div>
+        <div><label style={lbl}>FORMATI</label><input ref={rFileFormats} defaultValue="" placeholder="JPG, TIFF, RAW" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>TERMINI DI UTILIZZO</p><div style={grid}>
+        <div style={{gridColumn:"span 2"}}><label style={lbl}>MEDIA / CANALI</label><input ref={rUsageMedia} defaultValue="" placeholder="Social, Web, Stampa" style={inp}/></div>
+        <div><label style={lbl}>TERRITORIO</label><input ref={rTerritory} defaultValue="" placeholder="Italia" style={inp}/></div>
+        <div><label style={lbl}>DURATA</label><input ref={rDuration} defaultValue="" placeholder="12 mesi" style={inp}/></div>
+        <div><label style={lbl}>ESCLUSIVA</label>
+          <select ref={rExclusivity} defaultValue="No" style={{...inp, cursor:"pointer"}}>
+            <option value="No">No</option><option value="Si">Si</option>
+          </select>
+        </div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>CORRISPETTIVO</p><div style={grid}>
+        <div><label style={lbl}>FEE LICENZA (€)</label><input ref={rLicenseFee} defaultValue="" placeholder="Es. 2000" style={inp}/></div>
+        <div><label style={lbl}>SCADENZA PAGAMENTO</label><input ref={rPaymentDue} defaultValue="" type="date" style={inp}/></div>
+        <div><label style={lbl}>FORO COMPETENTE</label><input ref={rJurisdiction} defaultValue="Firenze" style={inp}/></div>
+      </div></div>
+      <div style={sec}><p style={d.docSectionLabel}>NOTE</p>
+        <textarea ref={rNotes} defaultValue="" rows={3} style={{...inp, width:"100%", resize:"vertical"}} placeholder="Note aggiuntive..."/>
+      </div>
+      <button onClick={generatePDF} style={{...d.btnPrimary, marginTop:8}}>↓ GENERA E STAMPA PDF</button>
+    </div>
+  );
+}
 
   const handleCreativeSelect = (id) => {
     if (!id) return;
@@ -992,114 +1288,6 @@ function NDAForm({ creatives }) {
   );
 }
 
-// ── 04 · Image Licensing ─────────────────────────────────────────
-function ImageLicensing({ creatives }) {
-  const today = new Date().toISOString().split("T")[0];
-  const r = {
-    docNum: useRef(null), docDate: useRef(null),
-    talentName: useRef(null), talentEmail: useRef(null),
-    clientName: useRef(null), clientEmail: useRef(null),
-    projectName: useRef(null), contentDesc: useRef(null),
-    shootDate: useRef(null), fileCount: useRef(null), fileFormats: useRef(null),
-    usageMedia: useRef(null), territory: useRef(null), duration: useRef(null),
-    exclusivity: useRef(null), licenseFee: useRef(null), paymentDue: useRef(null),
-    jurisdiction: useRef(null), notes: useRef(null),
-  };
-  const v = (k) => r[k]?.current?.value || "";
-
-  const handleCreativeSelect = (id) => {
-    if (!id) return;
-    const c = creatives.find((x) => x.id === id);
-    if (c) { if (r.talentName.current) r.talentName.current.value = c.nome || ""; }
-  };
-
-  const generatePDF = () => {
-    const html = pdfHeader("Image Licensing Agreement", v("docNum") || "LIC-", fmtDate(v("docDate"))) + `
-      <div class="sec"><div class="sec-label">Parti</div><div class="grid">
-        ${pdfField("Licenziante (Creativo)", v("talentName"))}${pdfField("Email creativo", v("talentEmail"))}
-        ${pdfField("Licenziatario (Cliente)", v("clientName"))}${pdfField("Email cliente", v("clientEmail"))}
-      </div></div>
-      <div class="sec"><div class="sec-label">Materiale Licenziato</div><div class="grid">
-        ${pdfField("Progetto", v("projectName"))}${pdfField("Data produzione", fmtDate(v("shootDate")))}
-        <div style="grid-column:span 2">${pdfField("Descrizione contenuto", v("contentDesc"))}</div>
-        ${pdfField("N. file", v("fileCount"))}${pdfField("Formati", v("fileFormats"))}
-      </div></div>
-      <div class="sec"><div class="sec-label">Termini di Utilizzo</div><div class="grid">
-        <div style="grid-column:span 2">${pdfField("Media / Canali", v("usageMedia"))}</div>
-        ${pdfField("Territorio", v("territory"))}${pdfField("Durata", v("duration"))}
-        ${pdfField("Esclusiva", v("exclusivity") || "No")}
-      </div></div>
-      <div class="sec"><div class="sec-label">Corrispettivo</div>
-        <div class="fee-box">
-          <div class="fee-row"><span>Fee licenza</span><span>€ ${v("licenseFee") || "—"}</span></div>
-          <div class="fee-row"><span>Scadenza pagamento</span><span>${fmtDate(v("paymentDue"))}</span></div>
-        </div>
-      </div>
-      <div class="grid" style="margin-bottom:28px">${pdfField("Foro competente", v("jurisdiction") || "Firenze")}</div>
-      ${v("notes") ? `<div class="sec"><div class="sec-label">Note</div><p style="font-size:14px">${v("notes")}</p></div>` : ""}
-      <div class="sign-row">
-        <div><div class="fl">${v("talentName") || "Creativo"}</div><div class="sign-line">Firma e data</div></div>
-        <div><div class="fl">${v("clientName") || "Cliente"}</div><div class="sign-line">Firma e data</div></div>
-      </div>
-      <div class="footer">the[name] · info.findthename@gmail.com</div></body></html>`;
-    const win = window.open("", "_blank"); win.document.write(html); win.document.close(); setTimeout(() => win.print(), 500);
-  };
-
-  const inp = { width: "100%", padding: "10px 12px", background: "#1a1714", border: "1px solid #2a2520", color: "#f5f0eb", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", borderRadius: 2 };
-  const lbl = { fontSize: 9, letterSpacing: "1px", textTransform: "uppercase", color: "#7a7068", display: "block", marginBottom: 6 };
-  const sec = { marginBottom: 32, paddingBottom: 32, borderBottom: "1px solid #1e1c1a" };
-  const grid = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 };
-
-  return (
-    <div style={d.docWrap}>
-      <p style={d.docDesc}>Licenza di utilizzo immagini e contenuti prodotti dai creativi</p>
-      <div style={sec}><p style={d.docSectionLabel}>AUTO-COMPILA DA CREATIVO NEL NETWORK</p>
-        <select onChange={(e) => handleCreativeSelect(e.target.value)} style={d.docSelect} defaultValue="">
-          <option value="">-- Seleziona creativo (licenziante) --</option>
-          {creatives.map((c) => <option key={c.id} value={c.id}>{c.nome} · {c.ruolo}</option>)}
-        </select>
-      </div>
-      <div style={sec}><p style={d.docSectionLabel}>INTESTAZIONE</p><div style={grid}>
-        <div><label style={lbl}>N. LICENZA</label><input ref={r.docNum} defaultValue="" placeholder="LIC-2025-001" style={inp}/></div>
-        <div><label style={lbl}>DATA</label><input ref={r.docDate} defaultValue={today} type="date" style={inp}/></div>
-      </div></div>
-      <div style={sec}><p style={d.docSectionLabel}>LICENZIANTE (CREATIVO)</p><div style={grid}>
-        <div><label style={lbl}>NOME</label><input ref={r.talentName} defaultValue="" placeholder="Nome Cognome" style={inp}/></div>
-        <div><label style={lbl}>EMAIL</label><input ref={r.talentEmail} defaultValue="" type="email" placeholder="email@creativo.com" style={inp}/></div>
-      </div></div>
-      <div style={sec}><p style={d.docSectionLabel}>LICENZIATARIO (CLIENTE)</p><div style={grid}>
-        <div><label style={lbl}>NOME / AZIENDA</label><input ref={r.clientName} defaultValue="" placeholder="Brand S.r.l." style={inp}/></div>
-        <div><label style={lbl}>EMAIL</label><input ref={r.clientEmail} defaultValue="" type="email" placeholder="email@brand.com" style={inp}/></div>
-      </div></div>
-      <div style={sec}><p style={d.docSectionLabel}>MATERIALE LICENZIATO</p><div style={grid}>
-        <div><label style={lbl}>NOME PROGETTO</label><input ref={r.projectName} defaultValue="" placeholder="Campagna SS26" style={inp}/></div>
-        <div><label style={lbl}>DATA PRODUZIONE</label><input ref={r.shootDate} defaultValue="" type="date" style={inp}/></div>
-        <div style={{gridColumn:"span 2"}}><label style={lbl}>DESCRIZIONE CONTENUTO</label><textarea ref={r.contentDesc} defaultValue="" rows={3} style={{...inp, resize:"vertical"}}/></div>
-        <div><label style={lbl}>NUMERO FILE</label><input ref={r.fileCount} defaultValue="" placeholder="Es. 30" style={inp}/></div>
-        <div><label style={lbl}>FORMATI</label><input ref={r.fileFormats} defaultValue="" placeholder="JPG, TIFF, RAW" style={inp}/></div>
-      </div></div>
-      <div style={sec}><p style={d.docSectionLabel}>TERMINI DI UTILIZZO</p><div style={grid}>
-        <div style={{gridColumn:"span 2"}}><label style={lbl}>MEDIA / CANALI</label><input ref={r.usageMedia} defaultValue="" placeholder="Social, Web, Stampa" style={inp}/></div>
-        <div><label style={lbl}>TERRITORIO</label><input ref={r.territory} defaultValue="" placeholder="Italia" style={inp}/></div>
-        <div><label style={lbl}>DURATA</label><input ref={r.duration} defaultValue="" placeholder="12 mesi" style={inp}/></div>
-        <div><label style={lbl}>ESCLUSIVA</label>
-          <select ref={r.exclusivity} defaultValue="No" style={{...inp, cursor:"pointer"}}>
-            <option value="No">No</option><option value="Si">Si</option>
-          </select>
-        </div>
-      </div></div>
-      <div style={sec}><p style={d.docSectionLabel}>CORRISPETTIVO</p><div style={grid}>
-        <div><label style={lbl}>FEE LICENZA (€)</label><input ref={r.licenseFee} defaultValue="" placeholder="Es. 2000" style={inp}/></div>
-        <div><label style={lbl}>SCADENZA PAGAMENTO</label><input ref={r.paymentDue} defaultValue="" type="date" style={inp}/></div>
-        <div><label style={lbl}>FORO COMPETENTE</label><input ref={r.jurisdiction} defaultValue="Firenze" style={inp}/></div>
-      </div></div>
-      <div style={sec}><p style={d.docSectionLabel}>NOTE</p>
-        <textarea ref={r.notes} defaultValue="" rows={3} style={{...inp, width:"100%", resize:"vertical"}} placeholder="Note aggiuntive..."/>
-      </div>
-      <button onClick={generatePDF} style={{...d.btnPrimary, marginTop:8}}>↓ GENERA E STAMPA PDF</button>
-    </div>
-  );
-}
 function CreativeEditModal({ creative, onClose, onSaved }) {
   const isNew = !creative;
   const [form, setForm] = useState({
