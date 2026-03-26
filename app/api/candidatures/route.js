@@ -25,11 +25,11 @@ export async function POST(request) {
   try {
     const body = await request.json();
 
-    const { error } = await supabasePublic
+    const { error } = await supabaseAdmin  // ✅ CORRETTO: era supabasePublic
       .from('candidatures')
       .insert([{
         nome: body.nome,
-        email: body.email,           // ← campo email salvato
+        email: body.email,
         eta: body.eta,
         citta: body.citta,
         travel: body.travel,
@@ -40,8 +40,8 @@ export async function POST(request) {
         esigenze: body.esigenze,
         portfolio: body.portfolio,
         foto_url: body.foto_url,
-        budget: body.budget,         // ← campo budget salvato
-        disponibilita: body.disponibilita, // ← campo disponibilità salvato
+        budget: body.budget,
+        disponibilita: body.disponibilita,
         status: 'pending'
       }]);
 
@@ -138,7 +138,6 @@ export async function PATCH(request) {
   try {
     const body = await request.json();
 
-    // 1. Aggiorna lo status sulla candidatura e recupera i dati
     const { data: candidatura, error } = await supabaseAdmin
       .from('candidatures')
       .update({ status: body.status })
@@ -148,8 +147,6 @@ export async function PATCH(request) {
 
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
-    // 2. ✅ Inserisce in creatives SOLO se promote=true (evita duplicati)
-    //    Il semplice "approva" NON inserisce — lo fa solo "Accetta al network"
     if (body.promote === true && candidatura) {
       const { error: creativeError } = await supabaseAdmin
         .from('creatives')
