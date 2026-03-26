@@ -1,5 +1,5 @@
 "use client";
-// VERSION: FINAL-v4 — fix hydration + fix input prima lettera
+// VERSION: FINAL-v5 — fix candidature a 0 + fix torna alla home
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -19,19 +19,16 @@ const RUOLI = [
   "Content Creator / Social Media Manager",
 ];
 
-// FIX: formatta date senza toLocaleDateString — SSR safe, output identico su server e client
 function safeDate(str) {
   if (!str) return "—";
   try {
-    const d = String(str).split("T")[0]; // "2026-03-22"
+    const d = String(str).split("T")[0];
     const [y, m, dd] = d.split("-");
     if (!y || !m || !dd) return "—";
     return `${dd}/${m}/${y}`;
   } catch { return "—"; }
 }
 
-// ── Top-level wrapper: blocca SSR completamente ──────────────────
-// Questo elimina TUTTI gli errori React #418 #423 #425
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -76,7 +73,8 @@ function AdminApp() {
           <span style={d.logoDot}> · </span>
           <span style={d.logoAdmin}>admin</span>
         </div>
-        <button onClick={() => setAuthed(false)} style={d.logoutBtn}>← ESCI</button>
+        {/* FIX: torna alla home invece di mostrare il login */}
+        <button onClick={() => { window.location.href = "/"; }} style={d.logoutBtn}>← ESCI</button>
       </div>
       <div style={d.tabs}>
         {[
@@ -110,10 +108,13 @@ function CandidaturesTab() {
 
   useEffect(() => { load(); }, []);
 
+  // FIX: usa /api/candidatures invece di supabase diretto (anon key bloccata da RLS)
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from("candidatures").select("*").order("created_at", { ascending: false });
-    setItems(data || []);
+    try {
+      const data = await fetch("/api/candidatures").then(r => r.json());
+      setItems(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); setItems([]); }
     setLoading(false);
   };
 
@@ -184,7 +185,6 @@ function CandidaturesTab() {
                     <Detail label="Assistente" value={item.assistente} />
                     <Detail label="Budget" value={item.budget} />
                     <Detail label="Disponibilità" value={item.disponibilita} />
-                    {/* FIX: safeDate invece di toLocaleDateString — nessun hydration mismatch */}
                     <Detail label="Data" value={safeDate(item.created_at)} />
                     <Detail label="Preferenze" value={item.preferenze} span={2} />
                     <Detail label="Esigenze" value={item.esigenze} span={2} />
@@ -282,15 +282,22 @@ function SeekersTab() {
 
   useEffect(() => { load(); }, []);
 
+  // FIX: usa /api/seeker-requests invece di supabase diretto
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from("seeker_requests").select("*").order("created_at", { ascending: false });
-    setItems(data || []);
+    try {
+      const data = await fetch("/api/seeker-requests").then(r => r.json());
+      setItems(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); setItems([]); }
     setLoading(false);
   };
 
   const updateStatus = async (id, status) => {
-    await supabase.from("seeker_requests").update({ status }).eq("id", id);
+    await fetch("/api/seeker-requests", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
     await load();
   };
 
@@ -379,8 +386,6 @@ function SeekersTab() {
 }
 
 // ── DOCUMENTI ────────────────────────────────────────────────────
-// FIX DEFINITIVO: mounted=false → non renderizza nulla sul server
-// Elimina TUTTI gli errori di hydration React #418/#423/#425
 function DocumentiTab() {
   const [activeDoc, setActiveDoc] = useState("booking");
   const [creatives, setCreatives] = useState([]);
@@ -393,7 +398,6 @@ function DocumentiTab() {
       .then(({ data }) => setCreatives(data || []));
   }, []);
 
-  // Sul server → null. Sul client dopo mount → form completo.
   if (!mounted) return null;
 
   const docs = [
@@ -422,7 +426,6 @@ function DocumentiTab() {
   );
 }
 
-// ── Stili form condivisi ─────────────────────────────────────────
 const S = {
   inp:  { width:"100%", padding:"10px 12px", background:"#1a1714", border:"1px solid #2a2520", color:"#f5f0eb", fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit", borderRadius:2 },
   ro:   { width:"100%", padding:"10px 12px", background:"#111",    border:"1px solid #2a2520", color:"#7a7068", fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit", borderRadius:2 },
@@ -469,7 +472,6 @@ function openPDF(html) {
   setTimeout(() => w.print(), 500);
 }
 
-// ── 01 · Booking Confirmation ────────────────────────────────────
 function BookingForm({ creatives }) {
   const rNum  = useRef(null); const rDate = useRef(null);
   const rPN   = useRef(null); const rSD   = useRef(null); const rLoc  = useRef(null);
@@ -486,7 +488,6 @@ function BookingForm({ creatives }) {
   }, []);
 
   const g = r => r?.current?.value || "";
-
   const onCreative = e => {
     const c = creatives.find(x => x.id === e.target.value);
     if (!c) return;
@@ -494,7 +495,6 @@ function BookingForm({ creatives }) {
     if (rCR.current) rCR.current.value = c.ruolo||"";
     if (rCC.current) rCC.current.value = c.citta||"";
   };
-
   const recalc = () => {
     const fee = parseFloat(g(rFee))||0;
     const pct = parseFloat(g(rPct))||20;
@@ -503,7 +503,6 @@ function BookingForm({ creatives }) {
     if (rAF.current)  rAF.current.value  = af;
     if (rTot.current) rTot.current.value = tot;
   };
-
   const pdf = () => openPDF(pdfBase("Booking Confirmation", g(rNum), fmtDate(g(rDate))) + `
     <div class="s"><div class="sl">Progetto</div><div class="g">
       <div>${pdfField("Nome progetto",g(rPN))}</div><div>${pdfField("Data servizio",fmtDate(g(rSD)))}</div>
@@ -571,7 +570,6 @@ function BookingForm({ creatives }) {
   );
 }
 
-// ── 02 · Production Quotation ────────────────────────────────────
 function QuotationForm({ creatives }) {
   const rNum   = useRef(null); const rDate  = useRef(null);
   const rClN   = useRef(null); const rClRef = useRef(null); const rClE   = useRef(null);
@@ -587,7 +585,6 @@ function QuotationForm({ creatives }) {
   useEffect(() => { if (rDate.current) rDate.current.value = todayISO(); }, []);
 
   const g = r => r?.current?.value || "";
-
   const recalc = () => {
     const items = [rAD,rPH,rVID,rSTY,rMUA,rMOD,rLOC,rEQ,rOTH];
     const tot  = items.reduce((s,r) => s+(parseFloat(r?.current?.value)||0), 0);
@@ -602,7 +599,6 @@ function QuotationForm({ creatives }) {
     if(rVAT.current) rVAT.current.value = vat.toFixed(2);
     if(rTG.current)  rTG.current.value  = gros.toFixed(2);
   };
-
   const pdf = () => openPDF(pdfBase("Production Quotation", g(rNum)||"QT-", fmtDate(g(rDate))) + `
     <div class="s"><div class="sl">Cliente e Progetto</div><div class="g">
       ${pdfField("Cliente",g(rClN))}${pdfField("Referente",g(rClRef))}
@@ -681,7 +677,6 @@ function QuotationForm({ creatives }) {
   );
 }
 
-// ── 03 · NDA ─────────────────────────────────────────────────────
 function NDAForm({ creatives }) {
   const rNum  = useRef(null); const rDate = useRef(null);
   const rP1N  = useRef(null); const rP1E  = useRef(null);
@@ -692,12 +687,10 @@ function NDAForm({ creatives }) {
   useEffect(() => { if (rDate.current) rDate.current.value = todayISO(); }, []);
 
   const g = r => r?.current?.value || "";
-
   const onCreative = e => {
     const c = creatives.find(x => x.id === e.target.value);
     if (c && rP2N.current) rP2N.current.value = c.nome||"";
   };
-
   const pdf = () => openPDF(pdfBase("Accordo di Riservatezza — NDA", g(rNum)||"NDA-", fmtDate(g(rDate))) + `
     <div class="s"><div class="sl">Parti</div><div class="g">
       ${pdfField("Parte Divulgante",g(rP1N))}${pdfField("Email",g(rP1E))}
@@ -745,8 +738,8 @@ function NDAForm({ creatives }) {
         <div style={{gridColumn:"span 2"}}><label style={S.lbl}>DESCRIZIONE</label><textarea ref={rPD} rows={3} style={{...S.inp,resize:"vertical"}} /></div>
       </div></div>
       <div style={S.sec}><p style={d.docSectionLabel}>CONDIZIONI</p><div style={S.grid}>
-        <div><label style={S.lbl}>DURATA (anni)</label>       <input ref={rDur} defaultValue="2" style={S.inp} /></div>
-        <div><label style={S.lbl}>FORO COMPETENTE</label>     <input ref={rJur} defaultValue="Firenze" style={S.inp} /></div>
+        <div><label style={S.lbl}>DURATA (anni)</label>   <input ref={rDur} defaultValue="2" style={S.inp} /></div>
+        <div><label style={S.lbl}>FORO COMPETENTE</label> <input ref={rJur} defaultValue="Firenze" style={S.inp} /></div>
       </div></div>
       <div style={S.sec}><p style={d.docSectionLabel}>NOTE</p>
         <textarea ref={rNote} rows={3} style={{...S.inp,width:"100%",resize:"vertical"}} placeholder="Note aggiuntive..." />
@@ -756,7 +749,6 @@ function NDAForm({ creatives }) {
   );
 }
 
-// ── 04 · Image Licensing ─────────────────────────────────────────
 function LicensingForm({ creatives }) {
   const rNum  = useRef(null); const rDate = useRef(null);
   const rTN   = useRef(null); const rTE   = useRef(null);
@@ -770,12 +762,10 @@ function LicensingForm({ creatives }) {
   useEffect(() => { if (rDate.current) rDate.current.value = todayISO(); }, []);
 
   const g = r => r?.current?.value || "";
-
   const onCreative = e => {
     const c = creatives.find(x => x.id === e.target.value);
     if (c && rTN.current) rTN.current.value = c.nome||"";
   };
-
   const pdf = () => openPDF(pdfBase("Image Licensing Agreement", g(rNum)||"LIC-", fmtDate(g(rDate))) + `
     <div class="s"><div class="sl">Parti</div><div class="g">
       ${pdfField("Licenziante (Creativo)",g(rTN))}${pdfField("Email creativo",g(rTE))}
@@ -824,11 +814,11 @@ function LicensingForm({ creatives }) {
         <div><label style={S.lbl}>EMAIL</label>          <input ref={rClE} type="email" style={S.inp} placeholder="email@brand.com" /></div>
       </div></div>
       <div style={S.sec}><p style={d.docSectionLabel}>MATERIALE LICENZIATO</p><div style={S.grid}>
-        <div><label style={S.lbl}>NOME PROGETTO</label>       <input ref={rPN}  style={S.inp} placeholder="Campagna SS26" /></div>
-        <div><label style={S.lbl}>DATA PRODUZIONE</label>     <input ref={rSD}  type="date" style={S.inp} /></div>
+        <div><label style={S.lbl}>NOME PROGETTO</label>   <input ref={rPN}  style={S.inp} placeholder="Campagna SS26" /></div>
+        <div><label style={S.lbl}>DATA PRODUZIONE</label> <input ref={rSD}  type="date" style={S.inp} /></div>
         <div style={{gridColumn:"span 2"}}><label style={S.lbl}>DESCRIZIONE CONTENUTO</label><textarea ref={rDesc} rows={3} style={{...S.inp,resize:"vertical"}} /></div>
-        <div><label style={S.lbl}>NUMERO FILE</label>  <input ref={rFC} style={S.inp} placeholder="Es. 30" /></div>
-        <div><label style={S.lbl}>FORMATI</label>       <input ref={rFF} style={S.inp} placeholder="JPG, TIFF, RAW" /></div>
+        <div><label style={S.lbl}>NUMERO FILE</label> <input ref={rFC} style={S.inp} placeholder="Es. 30" /></div>
+        <div><label style={S.lbl}>FORMATI</label>      <input ref={rFF} style={S.inp} placeholder="JPG, TIFF, RAW" /></div>
       </div></div>
       <div style={S.sec}><p style={d.docSectionLabel}>TERMINI DI UTILIZZO</p><div style={S.grid}>
         <div style={{gridColumn:"span 2"}}><label style={S.lbl}>MEDIA / CANALI</label><input ref={rMED} style={S.inp} placeholder="Social, Web, Stampa" /></div>
@@ -841,9 +831,9 @@ function LicensingForm({ creatives }) {
         </div>
       </div></div>
       <div style={S.sec}><p style={d.docSectionLabel}>CORRISPETTIVO</p><div style={S.grid}>
-        <div><label style={S.lbl}>FEE LICENZA (€)</label>        <input ref={rFEE} style={S.inp} placeholder="2000" /></div>
-        <div><label style={S.lbl}>SCADENZA PAGAMENTO</label>     <input ref={rPD}  type="date" style={S.inp} /></div>
-        <div><label style={S.lbl}>FORO COMPETENTE</label>        <input ref={rJUR} defaultValue="Firenze" style={S.inp} /></div>
+        <div><label style={S.lbl}>FEE LICENZA (€)</label>    <input ref={rFEE} style={S.inp} placeholder="2000" /></div>
+        <div><label style={S.lbl}>SCADENZA PAGAMENTO</label> <input ref={rPD}  type="date" style={S.inp} /></div>
+        <div><label style={S.lbl}>FORO COMPETENTE</label>    <input ref={rJUR} defaultValue="Firenze" style={S.inp} /></div>
       </div></div>
       <div style={S.sec}><p style={d.docSectionLabel}>NOTE</p>
         <textarea ref={rNote} rows={3} style={{...S.inp,width:"100%",resize:"vertical"}} placeholder="Note aggiuntive..." />
@@ -853,7 +843,6 @@ function LicensingForm({ creatives }) {
   );
 }
 
-// ── Modal creativo ───────────────────────────────────────────────
 function CreativeEditModal({ creative, onClose, onSaved }) {
   const isNew = !creative;
   const [form, setForm] = useState({
@@ -923,7 +912,6 @@ function CreativeEditModal({ creative, onClose, onSaved }) {
   );
 }
 
-// ── Componenti piccoli ───────────────────────────────────────────
 function SectionTitle({title,subtitle}) {
   return <div style={{marginBottom:28}}>
     <h2 style={{fontFamily:"Georgia,serif",fontStyle:"italic",fontSize:32,fontWeight:300,color:"#f5f0eb",margin:"0 0 4px"}}>{title}</h2>
@@ -955,7 +943,6 @@ function AvatarFallback({name,small}) {
 function Loading() { return <p style={{fontSize:13,color:"#7a7068",textAlign:"center",padding:"2rem"}}>Caricamento…</p>; }
 function EmptyBox({text}) { return <div style={{textAlign:"center",padding:"3rem",border:"1px dashed #2a2a2a",borderRadius:8}}><p style={{fontSize:13,color:"#7a7068",margin:0}}>{text}</p></div>; }
 
-// ── Stili ────────────────────────────────────────────────────────
 const d = {
   loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0d0b0a"},
   loginBox:{background:"#141210",padding:"2.5rem",borderRadius:4,width:360,border:"1px solid #2a2520"},
